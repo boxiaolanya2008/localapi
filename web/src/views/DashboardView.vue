@@ -7,6 +7,7 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import VChart from 'vue-echarts'
 import { useDark } from '@vueuse/core'
 import StatCard from '@/components/StatCard.vue'
+import SkeletonBox from '@/components/SkeletonBox.vue'
 import api from '@/api'
 
 use([CanvasRenderer, LineChart, PieChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
@@ -117,7 +118,9 @@ const barOption = computed<any>(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
+  <div class="page">
+    <SkeletonBox v-if="loading" type="detail" />
+    <template v-else>
     <el-row :gutter="16">
       <el-col v-for="card in cards" :key="card.title" :span="6" :xs="12">
         <div class="mb16">
@@ -175,6 +178,7 @@ const barOption = computed<any>(() => {
         </div>
       </el-col>
     </el-row>
+    </template>
   </div>
 </template>
 

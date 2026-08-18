@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import SkeletonBox from '@/components/SkeletonBox.vue'
+import EmptyBox from '@/components/EmptyBox.vue'
 import api from '@/api'
 
 const loading = ref(false)
@@ -125,9 +127,11 @@ function fmtParam(k: string, v: unknown): string {
       <span class="muted">参数模板 = 一组采样/结构化/进阶设置。在分组里绑定后,该分组密钥的请求未显式给出的参数自动用模板补齐</span>
     </div>
 
-    <el-row v-loading="loading" :gutter="16">
-      <el-col v-for="p in presets" :key="p.id" :span="8" :md="12" :xs="24" class="mb16">
-        <div class="card preset-card">
+    <SkeletonBox v-if="loading" type="cards" :count="3" />
+    <template v-else>
+      <el-row v-if="presets.length" :gutter="16">
+        <el-col v-for="p in presets" :key="p.id" :span="8" :md="12" :xs="24" class="mb16">
+          <div class="card preset-card">
           <div class="head">
             <span class="name">{{ p.name }}</span>
             <el-tag :type="TAG_META[p.tag]?.type || 'info'" effect="dark" size="small">{{ TAG_META[p.tag]?.label || p.tag }}</el-tag>
@@ -148,7 +152,9 @@ function fmtParam(k: string, v: unknown): string {
           </div>
         </div>
       </el-col>
-    </el-row>
+      </el-row>
+      <EmptyBox v-if="!presets.length" title="还没有参数模板" desc="点右上角「新建模板」,配置采样/结构化/进阶参数,再在分组里绑定" />
+    </template>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑参数模板' : '新建参数模板'" width="620px" top="5vh">
       <el-form :model="form" label-width="108px">

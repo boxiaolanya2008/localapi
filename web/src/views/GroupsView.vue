@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import SkeletonBox from '@/components/SkeletonBox.vue'
+import EmptyBox from '@/components/EmptyBox.vue'
 import { PROMPT_PRESETS } from '@/constants/prompts'
 import api from '@/api'
 
@@ -107,9 +109,11 @@ function multLabel(m: number): string {
       <span class="muted">分组定义计费倍率。倍率 0 = 免费;小于 1 = 比官方便宜;密钥创建时归属某个分组</span>
     </div>
 
-    <el-row v-loading="loading" :gutter="16">
-      <el-col v-for="g in groups" :key="g.id" :span="8" :md="8" :xs="24" class="mb16">
-        <div class="card group-card">
+    <SkeletonBox v-if="loading" type="cards" :count="3" />
+    <template v-else>
+      <el-row v-if="groups.length" :gutter="16">
+        <el-col v-for="g in groups" :key="g.id" :span="8" :md="8" :xs="24" class="mb16">
+          <div class="card group-card">
           <div class="head">
             <span class="name">{{ g.name }}</span>
             <div class="head-tags">
@@ -145,7 +149,9 @@ function multLabel(m: number): string {
           </div>
         </div>
       </el-col>
-    </el-row>
+      </el-row>
+      <EmptyBox v-if="!groups.length" title="还没有分组" desc="点右上角「新建分组」开始,设置计费倍率与提示词" />
+    </template>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑分组' : '新建分组'" width="480px">
       <el-form :model="form" label-width="90px">

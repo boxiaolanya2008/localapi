@@ -44,7 +44,12 @@ function logout() {
 <template>
   <router-view v-if="isLogin" />
   <el-container v-else class="layout" direction="horizontal">
-    <el-aside width="220px" class="aside">
+    <div class="ambient" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+    </div>
+    <el-aside width="230px" class="aside">
       <div class="brand">
         <svg viewBox="0 0 24 24" class="logo" aria-hidden="true">
           <path d="M12 2l8 4v12l-8 4-8-4V6l8-4zm0 2.2L6 7.2v9.6l6 3 6-3V7.2l-6-3z" />
@@ -85,11 +90,16 @@ function logout() {
 <style scoped lang="scss">
 .layout {
   height: 100%;
+  position: relative;
 }
 
 .aside {
-  background: var(--card-bg);
-  border-right: 1px solid var(--border-soft);
+  position: relative;
+  z-index: 1;
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
 }
@@ -119,8 +129,9 @@ function logout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--card-bg);
-  border-bottom: 1px solid var(--border-soft);
+  background: transparent;
+  border-bottom: 1px solid var(--glass-border);
+  padding: 0 28px;
 }
 
 .header-title {
@@ -136,6 +147,8 @@ function logout() {
 
 .main {
   overflow-y: auto;
-  padding: 20px;
+  padding: 28px 32px 40px;
+  position: relative;
+  z-index: 1;
 }
 </style>

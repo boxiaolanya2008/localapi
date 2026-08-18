@@ -4,6 +4,8 @@ import { ElMessage } from 'element-plus'
 import { Icon } from '@iconify/vue'
 import ChannelCard from '@/components/ChannelCard.vue'
 import ThemeEditor from '@/components/ThemeEditor.vue'
+import SkeletonBox from '@/components/SkeletonBox.vue'
+import EmptyBox from '@/components/EmptyBox.vue'
 import { PROVIDERS } from '@/constants/providers'
 import { MODEL_CATALOG } from '@/constants/catalog'
 import { PROMPT_PRESETS } from '@/constants/prompts'
@@ -204,14 +206,17 @@ async function save() {
       <span class="muted">渠道 = 上游供应商。API Key、模型、价格全部在这里录入,不走 .env</span>
     </div>
 
-    <div v-loading="loading">
-      <el-row v-if="channels.length" :gutter="16">
-        <el-col v-for="ch in channels" :key="ch.id" :span="8" :md="12" :xs="24" class="mb16">
-          <ChannelCard :channel="ch" @edit="openEdit" @changed="load" />
-        </el-col>
-      </el-row>
-      <el-empty v-else description="还没有渠道,点右上角添加你的第一个供应商" />
-    </div>
+    <SkeletonBox v-if="loading" type="cards" :count="3" />
+    <template v-else>
+      <div>
+        <el-row v-if="channels.length" :gutter="16">
+          <el-col v-for="ch in channels" :key="ch.id" :span="8" :md="12" :xs="24" class="mb16">
+            <ChannelCard :channel="ch" @edit="openEdit" @changed="load" />
+          </el-col>
+        </el-row>
+        <EmptyBox v-else title="还没有渠道" desc="点击右上角「添加渠道」,选一个提供商并填上你的密钥,先跑通第一个供应商" />
+      </div>
+    </template>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑渠道' : '添加渠道'" width="640px" top="6vh">
       <el-form :model="form" label-width="96px">

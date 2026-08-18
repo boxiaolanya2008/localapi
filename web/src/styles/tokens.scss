@@ -1,0 +1,11 @@
+$radius-md: 12px;
+$shadow-hover: 0 10px 28px rgba(0, 0, 0, 0.14);
+$transition-fast: all 0.25s ease;
+
+@mixin hover-lift {
+  transition: $transition-fast;
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: $shadow-hover;
+  }
+}

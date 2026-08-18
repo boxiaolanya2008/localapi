@@ -11,6 +11,7 @@ const routes = [
   { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { title: '分组管理' } },
   { path: '/catalog', name: 'catalog', component: () => import('@/views/CatalogView.vue'), meta: { title: '模型目录' } },
   { path: '/params', name: 'params', component: () => import('@/views/ParamsView.vue'), meta: { title: '参数模板' } },
+  { path: '/shop', name: 'shop', component: () => import('@/views/ShopView.vue'), meta: { title: '商城' } },
   { path: '/usage', name: 'usage', component: () => import('@/views/UsageView.vue'), meta: { title: '使用记录' } },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -174,6 +174,15 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     res.json({ ok: true })
   })
 
+  r.post('/channels/:id/credit', (req, res) => {
+    const id = Number(req.params.id)
+    const delta = Number(req.body?.delta ?? 0)
+    if (!Number.isFinite(id) || !Number.isFinite(delta)) return res.status(400).json({ message: 'bad input' })
+    const next = store.addChannelCredit(id, delta)
+    if (next === null) return res.status(404).json({ message: 'channel not found' })
+    res.json({ ok: true, credit: next, delta })
+  })
+
   r.post('/channels/:id/test', async (req, res) => {
     const id = Number(req.params.id)
     const ch = store.getChannel(id)

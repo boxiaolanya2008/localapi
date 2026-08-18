@@ -20,6 +20,7 @@ const menus = [
   { name: 'groups', path: '/groups', label: '分组管理', icon: 'mdi:account-group-outline' },
   { name: 'catalog', path: '/catalog', label: '模型目录', icon: 'mdi:book-open-page-variant-outline' },
   { name: 'params', path: '/params', label: '参数模板', icon: 'mdi:tune-variant' },
+  { name: 'shop', path: '/shop', label: '商城', icon: 'mdi:storefront-outline' },
   { name: 'usage', path: '/usage', label: '使用记录', icon: 'mdi:chart-timeline-variant' },
   { name: 'settings', path: '/settings', label: '设置', icon: 'mdi:cog-outline' },
 ]

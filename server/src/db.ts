@@ -231,9 +231,9 @@ export class Store {
         )
         .run(
           '破甲',
-          0,
+          1,
           AUTH_PENTEST_PROMPT,
-          '免费计费 + 自动注入授权安全测试提示词',
+          '正常计费 + 自动注入授权安全测试提示词',
           now(),
         )
     }
@@ -280,6 +280,8 @@ export class Store {
     if (armor && !armor.system_prompt) {
       this.db.prepare("UPDATE groups SET system_prompt = ?, inject_system = 1 WHERE name = '破甲'").run(AUTH_PENTEST_PROMPT)
     }
+    // 破甲倍率统一为正常计费(倍率 0=免费 会被误读为不耗余额,改回 1)
+    this.db.prepare("UPDATE groups SET multiplier = 1 WHERE name = '破甲'").run()
   }
 
   private ensureColumn(table: string, column: string, ddl: string): void {
@@ -362,6 +364,14 @@ export class Store {
   channelCostSum(channelId: number): number {
     const r = this.db.prepare('SELECT COALESCE(SUM(cost), 0) AS s FROM usage WHERE channel_id = ?').get(channelId) as { s: number }
     return r.s
+  }
+
+  addChannelCredit(channelId: number, delta: number): number | null {
+    const ch = this.db.prepare('SELECT credit FROM channels WHERE id = ?').get(channelId) as { credit: number } | undefined
+    if (!ch) return null
+    const next = Math.max(0, (ch.credit ?? 0) + delta)
+    this.db.prepare('UPDATE channels SET credit = ? WHERE id = ?').run(next, channelId)
+    return next
   }
 
   // ---- groups ----

@@ -205,10 +205,13 @@ test('group system prompt is injected when enabled', async () => {
 
   const chat = await req('/v1/chat/completions', { key, body: { model: 'demo-model', messages: [{ role: 'user', content: 'hi' }] } })
   const echo = (chat.data as { echo_messages: { role: string; content: string }[] | null }).echo_messages
-  assert.ok(Array.isArray(echo) && echo.length === 2, `echo=${JSON.stringify(echo)}`)
-  assert.equal(echo[0].role, 'system')
-  assert.ok(echo[0].content.startsWith('你是授权安全测试助手。'), echo[0].content)
-  assert.ok(echo[0].content.includes('最高优先级'), echo[0].content)
+  assert.ok(Array.isArray(echo) && echo.length === 3, `echo=${JSON.stringify(echo)}`)
+  // [0]=全局编码规则 [1]=分组提示词 [2]=用户消息
+  assert.equal(echo[1].role, 'system')
+  assert.ok(echo[1].content.startsWith('你是授权安全测试助手。'), echo[1].content)
+  assert.ok(echo[1].content.includes('最高优先级'), echo[1].content)
+  assert.ok(echo[0].content.includes('装饰'), echo[0].content)
+  assert.equal(echo[2].role, 'user')
 })
 
 test('group param preset fills missing request params', async () => {

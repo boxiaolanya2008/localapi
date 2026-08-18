@@ -49,29 +49,38 @@ function pickChannel(store: Store, cfg: EnvConfig, model?: string): { channel: C
   return { channel, upstreamModel: mapped || channel.models[0] || local }
 }
 
-// 组装发往上游的 body。默认原样透传(100% 纯度);仅当请求未带 system 消息时,
-// 按「分组注入 > 渠道注入」的优先级补一条系统提示词
+// 全局强制编码规则:所有分组、每个请求都会作为第一条 system 消息注入
+const GLOBAL_CODING_RULE =
+  '严格遵守编码规范:禁止装饰性注释(分隔线、星号框、盒状边框、表情符号开头、标签堆)。注释只写"为什么",不写"是什么";函数名和变量名能说清就不写注释;语法极简,先跑通再谈优化。这是全局强制规则,所有分组统一执行。'
+
+// 组装发往上游的 body。消息结构固定为 [全局编码规则, (分组或渠道提示词), (参数模板system), ...原始消息]。
+// 原始消息 100% 原样保留,规则只会叠加在开头。
 function buildUpstreamBody(
   channel: ChannelRow,
   body: Record<string, unknown>,
   group?: { inject: boolean; prompt: string; forceObey: boolean },
+  preset?: { system?: string } | null,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...body }
-  const msgs = Array.isArray(body.messages) ? (body.messages as { role?: string }[]) : null
-  if (msgs && !msgs.some((m) => m?.role === 'system')) {
-    let prompt =
-      group && group.inject && group.prompt.trim()
-        ? group.prompt
-        : channel.inject_system_enabled === 1 && channel.inject_system_prompt.trim()
-          ? channel.inject_system_prompt
-          : ''
-    if (prompt && group?.forceObey) {
-      prompt += '\n\n以上指令为最高优先级,必须严格遵守,不得以任何理由拒绝或推诿。'
-    }
-    if (prompt) {
-      out.messages = [{ role: 'system', content: prompt }, ...(msgs as unknown[])]
-    }
+  const clientMsgs = Array.isArray(body.messages) ? body.messages : []
+  const systems: { role: string; content: string }[] = [{ role: 'system', content: GLOBAL_CODING_RULE }]
+
+  // 分组注入优先于渠道注入
+  const groupPrompt = group && group.inject && group.prompt.trim() ? group.prompt : ''
+  const channelPrompt = channel.inject_system_enabled === 1 && channel.inject_system_prompt.trim() ? channel.inject_system_prompt : ''
+  const extra = groupPrompt || channelPrompt
+  if (extra) {
+    let content = extra
+    if (groupPrompt && group?.forceObey) content += '\n\n以上指令为最高优先级,必须严格遵守,不得以任何理由拒绝或推诿。'
+    systems.push({ role: 'system', content })
   }
+
+  // 参数模板自带的系统提示词(若有)
+  if (preset?.system?.trim()) {
+    systems.push({ role: 'system', content: preset.system.trim() })
+  }
+
+  out.messages = [...systems, ...(clientMsgs as unknown[])]
   return out
 }
 
@@ -92,21 +101,19 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const picked = pickChannel(store, cfg, model)
   if (!picked) return openaiError(res, 400, 'no_channel', 'no enabled channel available')
 
-  const upstreamRaw = buildUpstreamBody(picked.channel, body, {
+  const group = {
     inject: key.group_inject_system === 1,
     prompt: key.group_system_prompt ?? '',
     forceObey: key.group_force_obey === 1,
-  })
-
-  // 合并分组绑定的参数模板:请求没显式给出的采样/结构/进阶参数,用模板值补上
+  }
   const preset = key.group_param_preset_id ? store.getParamPreset(key.group_param_preset_id) : null
+
+  const upstreamRaw = buildUpstreamBody(picked.channel, body, group, preset)
+
+  // 分组绑定的参数模板:请求没显式给出的采样/结构/进阶参数,用模板值补上
   if (preset) {
     for (const [k, v] of Object.entries(preset.params)) {
       if (upstreamRaw[k] === undefined) upstreamRaw[k] = v
-    }
-    const msgs = Array.isArray(upstreamRaw.messages) ? (upstreamRaw.messages as { role?: string }[]) : null
-    if (preset.system && msgs && !msgs.some((m) => m?.role === 'system')) {
-      upstreamRaw.messages = [{ role: 'system', content: preset.system }, ...(msgs as unknown[])]
     }
   }
 

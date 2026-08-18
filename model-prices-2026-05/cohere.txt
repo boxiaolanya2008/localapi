@@ -1,0 +1,12 @@
+厂商: Cohere
+来源: https://cohere.com/pricing
+抓取状态: 抓取到页面描述（Model Vault/实例计费），未抓取到统一的每1k token 数字
+
+价格（2026年5月）
+- 输入价格（input price）: 未获取（Cohere 的 Model Vault 按实例/小时或长期承诺计费，需与销售/控制台确认）
+- 输出价格（output price）: 未获取（需手动确认）
+- 缓存写入（cache write）: 视为与输入相同 -> 未获取（需手动确认）
+- 缓存读取（cache read）: 视为与输出相同 -> 未获取（需手动确认）
+
+说明:
+- Cohere 在官网显示 Model Vault/实例级别计费，按模型与性能层不同计费。请联系销售或在控制台查看具体计价。

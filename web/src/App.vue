@@ -19,9 +19,20 @@ const menus = [
   { name: 'channels', path: '/channels', label: '渠道管理', icon: 'mdi:server-network' },
   { name: 'groups', path: '/groups', label: '分组管理', icon: 'mdi:account-group-outline' },
   { name: 'catalog', path: '/catalog', label: '模型目录', icon: 'mdi:book-open-page-variant-outline' },
+  { name: 'params', path: '/params', label: '参数模板', icon: 'mdi:tune-variant' },
   { name: 'usage', path: '/usage', label: '使用记录', icon: 'mdi:chart-timeline-variant' },
   { name: 'settings', path: '/settings', label: '设置', icon: 'mdi:cog-outline' },
 ]
+
+function toggleTheme() {
+  // 用浏览器原生 View Transitions API 做整页主题切换过渡(最新 Chrome/Edge 支持)
+  const apply = () => toggleDark()
+  if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+    ;(document as Document & { startViewTransition?: (fn: () => void) => void }).startViewTransition?.(apply)
+  } else {
+    apply()
+  }
+}
 
 function logout() {
   auth.logout()
@@ -50,7 +61,7 @@ function logout() {
       <el-header class="header" height="60px">
         <div class="header-title">{{ route.meta.title || '' }}</div>
         <div class="header-actions">
-          <el-button circle :title="isDark ? '切换到亮色' : '切换到暗色'" @click="toggleDark()">
+          <el-button circle :title="isDark ? '切换到亮色' : '切换到暗色'" @click="toggleTheme()">
             <el-icon :size="18"><Icon :icon="isDark ? 'mdi:white-balance-sunny' : 'mdi:weather-night'" /></el-icon>
           </el-button>
           <el-button text type="danger" @click="logout">

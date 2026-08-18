@@ -1,0 +1,12 @@
+厂商: Google (Vertex AI / Gemini)
+来源: https://cloud.google.com/vertex-ai/pricing
+抓取状态: 无法自动获取（网络/证书问题）
+
+价格（2026年5月）
+- 输入价格（input price）: 未获取（需手动确认）
+- 输出价格（output price）: 未获取（需手动确认）
+- 缓存写入（cache write）: 视为与输入相同 -> 未获取（需手动确认）
+- 缓存读取（cache read）: 视为与输出相同 -> 未获取（需手动确认）
+
+说明:
+- Google 的生成式 AI 与 Vertex AI 定价分表较多（按模型/实例/请求类型），建议登录 Cloud 定价页面或控制台确认精确每1k tokens/每百万 tokens 价格。

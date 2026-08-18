@@ -41,6 +41,7 @@ function startMockUpstream(): Promise<{ port: number; close: () => void }> {
                 prompt_tokens_details: { cached_tokens: 6 },
               },
               echo_messages: b.messages ?? null,
+              echo_params: { temperature: b.temperature ?? null, top_p: b.top_p ?? null },
             }),
           )
         }
@@ -208,6 +209,35 @@ test('group system prompt is injected when enabled', async () => {
   assert.equal(echo[0].role, 'system')
   assert.ok(echo[0].content.startsWith('你是授权安全测试助手。'), echo[0].content)
   assert.ok(echo[0].content.includes('最高优先级'), echo[0].content)
+})
+
+test('group param preset fills missing request params', async () => {
+  const p = await req('/admin/params', {
+    token: 'test-admin-token',
+    method: 'POST',
+    body: { name: '测试参数', tag: 'coding', params: { temperature: 0.1, top_p: 0.2, max_tokens: 4096 } },
+  })
+  const pid = (p.data as { id: number }).id
+
+  const g = await req('/admin/groups', {
+    token: 'test-admin-token',
+    method: 'POST',
+    body: { name: '参数组', multiplier: 1, param_preset_id: pid },
+  })
+  const gid = (g.data as { id: number }).id
+
+  const created = await req('/admin/keys', { token: 'test-admin-token', body: { name: 'param-key', groupId: gid } })
+  const key = (created.data as { key: string }).key
+
+  const chat = await req('/v1/chat/completions', { key, body: { model: 'demo-model', messages: [{ role: 'user', content: 'hi' }] } })
+  const ep = (chat.data as { echo_params: { temperature: number | null; top_p: number | null } }).echo_params
+  assert.equal(ep.temperature, 0.1)
+  assert.equal(ep.top_p, 0.2)
+
+  // 请求显式给定时,尊重请求值不覆盖
+  const chat2 = await req('/v1/chat/completions', { key, body: { model: 'demo-model', temperature: 0.9, messages: [{ role: 'user', content: 'hi' }] } })
+  const ep2 = (chat2.data as { echo_params: { temperature: number | null } }).echo_params
+  assert.equal(ep2.temperature, 0.9)
 })
 
 test('relay rejects bad key with 401', async () => {

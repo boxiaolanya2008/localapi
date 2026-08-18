@@ -1,0 +1,19 @@
+厂商: Microsoft (Azure OpenAI Service)
+来源: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/
+抓取状态: 部分抓取（页面内容有表格，但自动抓取输出中未包含具体数字，或为占位）
+
+页面抓取预览（片段）:
+## GPT-Chat Latest
+
+| Model                           | Pricing (1M Tokens)                         |
+| ------------------------------- | ------------------------------------------- |
+| GPT-Chat Latest 05052026 Global | Input: $-    Cached Input: $-    Output: $- |
+
+价格（2026年5月）
+- 输入价格（input price）: 未获取（表格存在但自动解析到占位符或需登录/地区设置）
+- 输出价格（output price）: 未获取（需人工确认）
+- 缓存写入（cache write）: 视为与输入相同 -> 未获取（需手动确认）
+- 缓存读取（cache read）: 视为与输出相同 -> 未获取（需手动确认）
+
+说明:
+- Azure 页面通常基于订阅区域和服务层展示最终价格，建议登录 Azure 门户或选择区域查看确切单价。

@@ -92,14 +92,25 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const picked = pickChannel(store, cfg, model)
   if (!picked) return openaiError(res, 400, 'no_channel', 'no enabled channel available')
 
-  const upstreamBody = {
-    ...buildUpstreamBody(picked.channel, body, {
-      inject: key.group_inject_system === 1,
-      prompt: key.group_system_prompt ?? '',
-      forceObey: key.group_force_obey === 1,
-    }),
-    model: picked.upstreamModel,
+  const upstreamRaw = buildUpstreamBody(picked.channel, body, {
+    inject: key.group_inject_system === 1,
+    prompt: key.group_system_prompt ?? '',
+    forceObey: key.group_force_obey === 1,
+  })
+
+  // 合并分组绑定的参数模板:请求没显式给出的采样/结构/进阶参数,用模板值补上
+  const preset = key.group_param_preset_id ? store.getParamPreset(key.group_param_preset_id) : null
+  if (preset) {
+    for (const [k, v] of Object.entries(preset.params)) {
+      if (upstreamRaw[k] === undefined) upstreamRaw[k] = v
+    }
+    const msgs = Array.isArray(upstreamRaw.messages) ? (upstreamRaw.messages as { role?: string }[]) : null
+    if (preset.system && msgs && !msgs.some((m) => m?.role === 'system')) {
+      upstreamRaw.messages = [{ role: 'system', content: preset.system }, ...(msgs as unknown[])]
+    }
   }
+
+  const upstreamBody = { ...upstreamRaw, model: picked.upstreamModel }
   const url = picked.channel.base_url.replace(/\/+$/, '') + '/' + path
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), body.stream ? STREAM_TIMEOUT_MS : RELAY_TIMEOUT_MS)

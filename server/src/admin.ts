@@ -210,6 +210,9 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
         priceIn: store.getSetting('default_price_in', '0'),
         priceOut: store.getSetting('default_price_out', '0'),
       },
+      features: {
+        premiumUnlocked: store.getSetting('feature_unlocked', '0') === '1',
+      },
     })
   })
 
@@ -217,6 +220,45 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     const body = req.body ?? {}
     if (body.price_in !== undefined) store.setSetting('default_price_in', String(body.price_in))
     if (body.price_out !== undefined) store.setSetting('default_price_out', String(body.price_out))
+    res.json({ ok: true })
+  })
+
+  const DEMO_VIP_KEY = 'LP-VIP-LOCAL-2026'
+  r.post('/settings/activate', (req, res) => {
+    const key = String(req.body?.activate_key ?? '').trim()
+    if (!key) return res.status(400).json({ message: '请输入解锁密钥' })
+    if (key === DEMO_VIP_KEY || store.getSetting('premium_key', '') === key) {
+      store.setSetting('feature_unlocked', '1')
+      return res.json({ ok: true, unlocked: true })
+    }
+    res.status(403).json({ message: '解锁密钥无效' })
+  })
+
+  // ---- param presets ----
+
+  r.get('/params', (_req, res) => {
+    res.json(store.listParamPresets())
+  })
+
+  r.post('/params', (req, res) => {
+    const body = req.body ?? {}
+    if (!String(body.name ?? '').trim()) return res.status(400).json({ message: 'name is required' })
+    const row = store.createParamPreset(body)
+    res.json(row)
+  })
+
+  r.patch('/params/:id', (req, res) => {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'bad id' })
+    const row = store.updateParamPreset(id, req.body ?? {})
+    if (!row) return res.status(404).json({ message: 'param preset not found' })
+    res.json(row)
+  })
+
+  r.delete('/params/:id', (req, res) => {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'bad id' })
+    if (!store.deleteParamPreset(id)) return res.status(404).json({ message: 'param preset not found' })
     res.json({ ok: true })
   })
 

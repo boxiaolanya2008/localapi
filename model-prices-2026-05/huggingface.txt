@@ -1,0 +1,12 @@
+厂商: Hugging Face (Inference API)
+来源: https://huggingface.co/inference-api
+抓取状态: 无法自动获取（网络/证书问题）
+
+价格（2026年5月）
+- 输入价格（input price）: 未获取（需手动确认）
+- 输出价格（output price）: 未获取（需手动确认）
+- 缓存写入（cache write）: 视为与输入相同 -> 未获取（需手动确认）
+- 缓存读取（cache read）: 视为与输出相同 -> 未获取（需手动确认）
+
+说明:
+- Hugging Face 提供按请求/实例/加速器计费的多种选项，请登录控制台或查看官方定价页以获取具体数值。

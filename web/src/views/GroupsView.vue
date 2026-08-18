@@ -7,13 +7,15 @@ import api from '@/api'
 
 const loading = ref(false)
 const groups = ref<any[]>([])
+const presets = ref<any[]>([])
 const usageMap = ref<Record<string, { tokens: number; requests: number; cost: number }>>({})
 
 async function load() {
   loading.value = true
   try {
-    const [g, s] = await Promise.all([api.get('/admin/groups'), api.get('/admin/stats')])
+    const [g, s, p] = await Promise.all([api.get('/admin/groups'), api.get('/admin/stats'), api.get('/admin/params')])
     groups.value = g.data
+    presets.value = p.data
     usageMap.value = {}
     for (const u of s.data.byGroup ?? []) usageMap.value[u.group_name] = u
   } finally {
@@ -29,7 +31,7 @@ const form = ref<any>({})
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', multiplier: 1, model_limit: [], inject_system: false, system_prompt: '', note: '' }
+  form.value = { name: '', multiplier: 1, model_limit: [], param_preset_id: 0, inject_system: false, system_prompt: '', note: '' }
   dialogVisible.value = true
 }
 
@@ -39,6 +41,7 @@ function openEdit(g: any) {
     name: g.name,
     multiplier: g.multiplier,
     model_limit: g.model_limit ? [...g.model_limit] : [],
+    param_preset_id: g.param_preset_id || 0,
     inject_system: !!g.inject_system,
     system_prompt: g.system_prompt || '',
     note: g.note,
@@ -60,6 +63,7 @@ async function save() {
     name: form.value.name.trim(),
     multiplier: Number(form.value.multiplier),
     model_limit: form.value.model_limit,
+    param_preset_id: Number(form.value.param_preset_id || 0),
     inject_system: form.value.inject_system ? 1 : 0,
     system_prompt: form.value.system_prompt,
     note: form.value.note,
@@ -165,6 +169,11 @@ function multLabel(m: number): string {
             style="width: 100%"
           >
             <el-option v-for="m in form.model_limit" :key="m" :label="m" :value="m" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="参数模板">
+          <el-select v-model="form.param_preset_id" clearable placeholder="不覆盖请求参数" style="width: 100%">
+            <el-option v-for="p in presets" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="系统提示词">

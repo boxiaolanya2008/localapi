@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Icon } from '@iconify/vue'
-import { PROMPT_PRESETS } from '@/constants/prompts'
+import { PROMPT_PRESETS, PREMIUM_PROMPTS } from '@/constants/prompts'
 import api from '@/api'
 
 const loading = ref(true)
@@ -11,10 +11,15 @@ const priceIn = ref('')
 const priceOut = ref('')
 
 const groups = ref<any[]>([])
+const unlocked = ref(false)
+const unlockKey = ref('')
+const activating = ref(false)
 const armorForm = ref({ prompt: '', enabled: true, force: true })
 const armorGroup = computed(
   () => groups.value.find((g) => g.inject_system === 1) ?? groups.value.find((g) => g.name === '破甲') ?? null,
 )
+// 可用提示词:免费预设 + (解锁后)付费预设
+const promptOptions = computed(() => [...PROMPT_PRESETS, ...(unlocked.value ? PREMIUM_PROMPTS : [])])
 
 async function load() {
   loading.value = true
@@ -23,6 +28,7 @@ async function load() {
     info.value = s.data
     priceIn.value = s.data.defaults.priceIn
     priceOut.value = s.data.defaults.priceOut
+    unlocked.value = !!s.data.features?.premiumUnlocked
     groups.value = g.data
     const ag = g.data.find((x: any) => x.inject_system === 1) ?? g.data.find((x: any) => x.name === '破甲')
     if (ag) {
@@ -35,9 +41,31 @@ async function load() {
 
 onMounted(load)
 
+async function activate() {
+  if (!unlockKey.value.trim()) {
+    ElMessage.warning('输入激活密钥')
+    return
+  }
+  activating.value = true
+  try {
+    const { data } = await api.post('/admin/settings/activate', { activate_key: unlockKey.value.trim() })
+    if (data.unlocked) {
+      unlocked.value = true
+      ElMessage.success('解锁成功,付费提示词已开放')
+    }
+  } catch {
+    // 拦截器已提示
+  } finally {
+    activating.value = false
+  }
+}
+
 function useArmorPreset(id: string) {
-  const p = PROMPT_PRESETS.find((x) => x.id === id)
-  if (p) armorForm.value.prompt = p.system
+  const p = promptOptions.value.find((x) => x.id === id)
+  if (p) {
+    armorForm.value.prompt = p.system
+    ElMessage.success(`已载入提示词「${p.name}」`)
+  }
 }
 
 async function saveArmor() {
@@ -91,11 +119,16 @@ const armorPresetId = ref('')
           <div class="card-title"><el-icon class="mr8"><Icon icon="mdi:shield-alert-outline" /></el-icon>破解提示词(破甲组)</div>
           <p class="muted">只保留一个提示词注入的破解分组。该分组密钥的请求会自动注入下面的 system 提示词(请求自带 system 消息时不注入);开启「强制遵守」会在提示词末尾追加最高优先级指令。</p>
           <div class="prompt-row">
-            <el-select v-model="armorPresetId" placeholder="内置提示词(可选)" style="width: 180px" @change="useArmorPreset">
-              <el-option v-for="p in PROMPT_PRESETS" :key="p.id" :label="p.name" :value="p.id" />
+            <el-select v-model="armorPresetId" placeholder="内置提示词" style="width: 200px" @change="useArmorPreset">
+              <el-option v-for="p in promptOptions" :key="p.id" :label="p.name" :value="p.id" />
             </el-select>
             <el-switch v-model="armorForm.enabled" active-text="开启注入" />
             <el-switch v-model="armorForm.force" active-text="强制遵守" />
+          </div>
+          <div v-if="!unlocked" class="unlock-row">
+            <el-input v-model="unlockKey" placeholder="输入激活密钥解锁付费提示词" style="width: 260px" @keyup.enter="activate" />
+            <el-button type="warning" plain :loading="activating" @click="activate">解锁付费提示词</el-button>
+            <span class="muted">演示密钥:LP-VIP-LOCAL-2026</span>
           </div>
           <el-input v-model="armorForm.prompt" type="textarea" :rows="5" class="mt16" placeholder="自定义破解提示词,模型必须遵守" />
           <div class="mt16">
@@ -106,14 +139,16 @@ const armorPresetId = ref('')
 
         <div class="card mt16">
           <div class="card-title"><el-icon class="mr8"><Icon icon="mdi:currency-cny" /></el-icon>默认单价</div>
-          <p class="muted">此处设新建渠道时的默认单价;已有渠道在「渠道管理」里单独改</p>
-          <div class="price-row">
-            <span>输入 ¥</span>
-            <el-input-number v-model="priceIn" :controls="false" :precision="6" :step="0.0001" />
-            <span>/千 token</span>
-            <span class="ml">输出 ¥</span>
-            <el-input-number v-model="priceOut" :controls="false" :precision="6" :step="0.0001" />
-            <span>/千 token</span>
+          <p class="muted">新建渠道时默认采用的单价;已有渠道在「渠道管理」里单独改</p>
+          <div class="price-grid">
+            <div class="price-field">
+              <span class="price-label">输入价</span>
+              <el-input-number v-model="priceIn" :controls="false" :precision="6" :step="0.0001" placeholder="¥ / 千 token" style="width: 100%" />
+            </div>
+            <div class="price-field">
+              <span class="price-label">输出价</span>
+              <el-input-number v-model="priceOut" :controls="false" :precision="6" :step="0.0001" placeholder="¥ / 千 token" style="width: 100%" />
+            </div>
           </div>
           <el-button type="primary" class="mt16" @click="saveDefaults">保存默认单价</el-button>
         </div>
@@ -219,6 +254,35 @@ const armorPresetId = ref('')
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+.unlock-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #f59e0b 12%, transparent);
+  border: 1px dashed #f59e0b;
+}
+
+.price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.price-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.price-label {
+  color: var(--text-sub);
+  font-size: 13px;
 }
 
 .ml {

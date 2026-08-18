@@ -6,4 +6,5 @@ data/
 *.log
 *.tsbuildinfo
 .DS_Store
-Thumbs.db.zcode/
+Thumbs.db
+.zcode/

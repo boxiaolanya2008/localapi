@@ -263,18 +263,25 @@ async function handleStream(
 
   let usage: { prompt_tokens: number; completion_tokens: number; cached_tokens: number } | null = null
   let outChars = 0
+  let tail = ''
   const promptEst = estimateTokens(jsonStr(upstreamBody))
+  const ensureDone = () => {
+    // 上游没发 OpenAI 终止帧 [DONE] 时补一个,避免客户端报 "stream ended without terminal event"
+    if (!tail.includes('[DONE]')) res.write('data: [DONE]\n\n')
+  }
 
   try {
     for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
       const text = chunk instanceof Uint8Array ? Buffer.from(chunk).toString('utf8') : String(chunk)
       outChars += text.length
+      tail = (tail + text).slice(-128)
       usage = usage ?? extractUsage(text)
       res.write(chunk instanceof Uint8Array ? chunk : Buffer.from(text))
     }
   } catch (err) {
     const msg = String((err as Error).message ?? err)
     recordError(store, key, channel, model, started, 'stream aborted: ' + msg, requestId)
+    ensureDone()
     res.end()
     return
   }
@@ -283,6 +290,7 @@ async function handleStream(
   const ct = usage?.completion_tokens ?? estimateTokens(String(outChars))
   const cached = usage?.cached_tokens ?? 0
   recordOk(store, key, channel, model, started, pt, ct, cached, requestId, now() - started)
+  ensureDone()
   res.end()
 }
 

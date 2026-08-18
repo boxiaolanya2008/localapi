@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7 - 2026-08-18
+
+- 流式输出健壮性:上游流未发终止帧 `data: [DONE]` 时,中转自动补发,修复 "Upstream stream ended without a terminal response event"
+- 工具调用(function calling)随请求原样透传,流式工具增量沿 SSE 透传
+- 测试 18/18
+
 ## 0.2.6 - 2026-08-18
 
 - 渠道新增「API 协议」与「路由路径」:支持 OpenAI Chat / OpenAI Responses / Anthropic Messages / 自定义路由

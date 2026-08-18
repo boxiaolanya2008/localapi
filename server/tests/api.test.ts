@@ -341,6 +341,46 @@ test('anthropic(claude) channel is translated to OpenAI-compatible response', as
   await req(`/admin/channels/${chid}`, { token: 'test-admin-token', method: 'DELETE' })
 })
 
+test('relay appends [DONE] when upstream stream lacks a terminal event', async (t) => {
+  const noTerm = http.createServer((q, s) => {
+    if ((q.url ?? '').includes('chat/completions')) {
+      let body = ''
+      q.on('data', (c) => (body += c))
+      q.on('end', () => {
+        s.writeHead(200, { 'content-type': 'text/event-stream' })
+        s.write('data: {"id":"x","choices":[{"delta":{"content":"hi"}}]}\n\n')
+        s.end()
+      })
+      return
+    }
+    s.writeHead(404); s.end('{}')
+  })
+  await new Promise<void>((r) => noTerm.listen(0, '127.0.0.1', r))
+  t.after(() => noTerm.close())
+  const port = (noTerm.address() as { port: number }).port
+
+  const ch = await req('/admin/channels', {
+    token: 'test-admin-token',
+    body: { name: 'no-term', base_url: `http://127.0.0.1:${port}` + '/v1', api_key: 'k', models: ['m'], price_in: 0, price_out: 0 },
+  })
+  const chid = (ch.data as { id: number }).id
+  const created = await req('/admin/keys', { token: 'test-admin-token', body: { name: 'nt-key', groupId: 1 } })
+  const key = (created.data as { key: string }).key
+
+  const res = await fetch(base + '/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+    body: JSON.stringify({ model: 'm', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+  })
+  const text = await res.text()
+  assert.equal(res.status, 200)
+  assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/)
+  // 自动补上了终止帧
+  assert.ok(text.trim().endsWith('data: [DONE]'), text)
+
+  await req(`/admin/channels/${chid}`, { token: 'test-admin-token', method: 'DELETE' })
+})
+
 test('channel test endpoint pings mock upstream', async () => {
   const r = await req('/admin/channels', { token: 'test-admin-token' })
   const id = (r.data as { id: number }[])[0].id

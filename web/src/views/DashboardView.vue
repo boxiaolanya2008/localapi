@@ -6,6 +6,7 @@ import { LineChart, PieChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { useDark } from '@vueuse/core'
+import { fmtBig } from '@/utils/format'
 import StatCard from '@/components/StatCard.vue'
 import SkeletonBox from '@/components/SkeletonBox.vue'
 import api from '@/api'
@@ -56,10 +57,16 @@ const lineOption = computed<any>(() => {
   const days = series.map((s: any) => s.date)
   const tokens = series.map((s: any) => s.tokens)
   return {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 48, right: 16, top: 30, bottom: 28 },
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter: (v: unknown) => fmtBig(Number(v ?? 0)) + ' tokens',
+    },
+    grid: { left: 56, right: 16, top: 30, bottom: 28 },
     xAxis: { type: 'category', data: days, boundaryGap: false },
-    yAxis: { type: 'value' },
+    yAxis: {
+      type: 'value',
+      axisLabel: { formatter: (v: number) => fmtBig(v) },
+    },
     series: [
       {
         name: 'Token',

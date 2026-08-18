@@ -8,6 +8,7 @@ import api from '@/api'
 
 const loading = ref(false)
 const presets = ref<any[]>([])
+const groups = ref<any[]>([])
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const form = ref<any>({})
@@ -22,14 +23,28 @@ const TAG_META: Record<string, { label: string; type: 'danger' | 'warning' | 'pr
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/admin/params')
-    presets.value = data
+    const [p, g] = await Promise.all([api.get('/admin/params'), api.get('/admin/groups')])
+    presets.value = p.data
+    groups.value = g.data
   } finally {
     loading.value = false
   }
 }
 
 onMounted(load)
+
+// 有哪些分组正在使用这个模板
+function usedBy(templateId: number) {
+  return groups.value.filter((g) => g.param_preset_id === templateId)
+}
+
+// 把某个分组绑定到该模板(同时解除它原来绑定的模板)
+async function bindGroup(templateId: number, groupId: number | undefined) {
+  if (!groupId) return
+  await api.patch(`/admin/groups/${groupId}`, { param_preset_id: templateId })
+  ElMessage.success(`模板已应用到「${groups.value.find((g) => g.id === groupId)?.name}」`)
+  load()
+}
 
 function openCreate() {
   editingId.value = null
@@ -142,6 +157,15 @@ function fmtParam(k: string, v: unknown): string {
           </div>
           <div v-if="p.system" class="system mono">{{ p.system }}</div>
           <div v-if="p.note" class="note muted">{{ p.note }}</div>
+          <div class="bind">
+            <span class="muted">应用到分组</span>
+            <el-select size="small" style="width: 130px" clearable placeholder="选分组" @change="(gid: any) => gid && bindGroup(p.id, gid as number)">
+              <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
+            </el-select>
+            <template v-if="usedBy(p.id).length">
+              <el-tag v-for="g in usedBy(p.id)" :key="g.id" size="small" type="success" effect="plain">{{ g.name }}</el-tag>
+            </template>
+          </div>
           <div class="actions">
             <el-button size="small" type="primary" plain @click="openEdit(p)">
               <el-icon class="mr8"><Icon icon="mdi:pencil-outline" /></el-icon>编辑
@@ -318,6 +342,15 @@ function fmtParam(k: string, v: unknown): string {
 
 .note {
   font-size: 12px;
+}
+
+.bind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--border-soft);
+  padding-top: 10px;
 }
 
 .actions {

@@ -38,15 +38,17 @@ function pickChannel(store: Store, cfg: EnvConfig, model?: string): { channel: C
   if (!chs.length) return null
   const local = model ?? ''
   const mapped = cfg.modelMap[local] ?? local
-  let hit: ChannelRow | undefined
   if (local) {
-    hit =
+    const hit =
       chs.find((c) => c.models.includes(mapped)) ??
       chs.find((c) => c.models.includes(local)) ??
       chs.find((c) => c.models.includes('*'))
+    // 找不到匹配的启用渠道就明确报错,绝不静默指到第一个渠道(否则请求会被送到错误的上游)
+    if (!hit) return null
+    return { channel: hit, upstreamModel: mapped }
   }
-  const channel = hit ?? chs[0]
-  return { channel, upstreamModel: mapped || channel.models[0] || local }
+  const first = chs[0]
+  return { channel: first, upstreamModel: first.models[0] ?? local }
 }
 
 // 全局强制编码规则:所有分组、每个请求都会作为第一条 system 消息注入
@@ -99,7 +101,14 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const body = req.body ?? {}
   const model = typeof body.model === 'string' && body.model ? body.model : undefined
   const picked = pickChannel(store, cfg, model)
-  if (!picked) return openaiError(res, 400, 'no_channel', 'no enabled channel available')
+  if (!picked) {
+    return openaiError(
+      res,
+      400,
+      'model_not_found',
+      '请求的模型在启用的渠道里不存在(或对应渠道被禁用)。请到「渠道管理」核对各渠道的模型列表与启用状态。',
+    )
+  }
 
   const group = {
     inject: key.group_inject_system === 1,

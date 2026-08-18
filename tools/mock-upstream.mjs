@@ -41,9 +41,11 @@ const server = http.createServer((req, res) => {
           object: 'chat.completion',
           model: parsed.model,
           choices: [{ index: 0, message: { role: 'assistant', content: '这是来自 mock 上游的非流式回复' }, finish_reason: 'stop' }],
-          usage: { prompt_tokens: 12, completion_tokens: 9, total_tokens: 21, prompt_tokens_details: { cached_tokens: 7 } },
-          echo_messages: parsed.messages || null,
-        })
+              usage: { prompt_tokens: 12, completion_tokens: 9, total_tokens: 21, prompt_tokens_details: { cached_tokens: 7 } },
+              echo_messages: parsed.messages || null,
+              echo_tools: (parsed.tools || []).map((t) => t.function?.name),
+              echo_tool_choice: parsed.tool_choice ?? null,
+            })
       }
       return
     }

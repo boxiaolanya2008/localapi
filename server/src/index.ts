@@ -45,7 +45,7 @@ export function createApp(cfg: ReturnType<typeof loadConfig>, store: Store): exp
 export function start(): void {
   const cfg = loadConfig()
   const store = new Store(cfg.dataDir)
-  store.seedChannels(cfg.channels)
+  // 渠道、模型、密钥全部在管理界面配置,不再从 env 灌入
   const app = createApp(cfg, store)
   const server = app.listen(cfg.port, cfg.host, () => {
     console.log(`localapi listening on http://${cfg.host}:${cfg.port}`)

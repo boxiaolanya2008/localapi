@@ -1,0 +1,210 @@
+# Simple Dev Preset - 极简开发预设
+# 规则: 无装饰注释, 无emoji(SVG替代), 代码语法极简, 自动PR, 中英双语
+
+# Core Agent
+- id: agent-loop
+  name: '@deepseek-ai/dsh-agent-loop'
+  config:
+    agents: []
+
+# Persona: Coding Style Rules
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    sections:
+      - id: coding-rules
+        content: |
+          # Coding Rules / 编码规则
+
+          ## Core Principles / 核心原则
+          1. Instruction compliance > all else / 指令遵守大于一切
+          2. User instructions override style preferences / 用户指令优先于风格偏好
+          3. Code simplicity > cleverness / 代码简洁 > 技巧
+          4. No ornamental comments / 禁止装饰符注释
+          5. No emoji, use SVG icons / 禁止emoji, 使用SVG图标
+          6. Syntax minimal / 语法极简
+
+          ## Banned Patterns / 禁止模式
+          ```
+          // BAD: decorative comment
+          /** 🎉 This does X */
+          /** ----- example ----- */
+          // ---- settings ----
+
+          // GOOD: functional comment only when needed
+          /** Register adapter for mock models. */
+          ```
+
+          ## Comment Style / 注释风格
+          - No emoji in comments / 注释中禁止emoji
+          - No decorative decorators / 禁止装饰性装饰器
+          - If user says "no decorative comments" or "no comments", obey exactly / 若用户明确要求“无装饰注释”或“无注释”，必须严格遵守
+          - Instruction compliance is higher priority than style preferences / 指令遵守优先级高于风格偏好
+          - JSDoc only for non-obvious contracts / JSDoc仅用于非显而易见的契约
+          - One line per fact / 一行一个事实
+
+          ## Code Examples / 代码示例
+
+          ### Before (禁止) / BAD
+          ```typescript
+          /**
+           * 🚀 Initialize the system
+           * @deprecated Use newInit instead
+           */
+          function init(): void {
+            // TODO: clean this up later
+            console.log('Starting...')
+          }
+          ```
+
+          ### After (推荐) / GOOD
+          ```typescript
+          /** Initialize system services. */
+          function init(): void {
+            registerAdapter()
+          }
+          ```
+
+          ## SVG Icon Usage / SVG图标用法
+          ```typescript
+          // Instead of emoji, use SVG
+          const icon = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+          ```
+
+      - id: bilingual
+        content: |
+          # Bilingual Support / 中英双语支持
+          Respond in the language of the prompt / 使用提示语言回复
+          Document code in English, comments may be bilingual / 代码文档用英文, 注释可双语
+
+      - id: pr-workflow
+        content: |
+          # Auto PR Workflow / 自动PR工作流
+
+          ## Process / 流程
+          1. Create feature branch: `feat/<description>`
+          2. Make changes with commit
+          3. Push and create PR
+          4. Auto-merge if checks pass
+
+          ## Branch Naming / 分支命名
+          - `feat/<feature>` - new features
+          - `fix/<bug>` - bug fixes
+          - `docs/<topic>` - documentation
+          - `refactor/<target>` - refactoring
+
+          ## Commit Style / 提交风格
+          ```
+          feat: add adapter registration
+          fix: resolve null pointer in parser
+          docs: update API reference
+          ```
+
+      - id: github-standards
+        content: |
+          # GitHub Repository Standards / GitHub仓库规范
+
+          ## Required Files / 必需文件
+          - `LICENSE` - GPL-3.0
+          - `README.md` - bilingual
+          - `CONTRIBUTING.md` - contribution guide
+          - `AGENTS.md` - agent instructions
+          - `.github/ISSUE_TEMPLATE/` - issue templates
+          - `.github/PULL_REQUEST_TEMPLATE.md` - PR template
+
+          ## Package Structure / 包结构
+          ```
+          packages/
+            <group>/
+              <pkg>/
+                src/
+                tests/
+                package.json
+                tsconfig.json
+                README.md
+          ```
+
+      - id: skill-autonomy
+        content: |
+          # Autonomous Skill Invocation / 自主技能调用
+
+          ## Trigger Conditions / 触发条件
+          - Code review → load dsh-code-review
+          - Doc changes → load dsh-doc-standards
+          - Before push → load dsh-pre-push-checks
+          - Agent notes → load dsh-archive-agent-notes
+          - Plugin dev → load cordis-plugin-development
+
+          ## Rules / 规则
+          - Invoke skills proactively / 主动调用技能
+          - Do not wait for user prompt / 不等待用户提示
+          - Load relevant skills before action / 行为前加载相关技能
+
+      - id: harness-plugins
+        content: |
+          # Harness Plugin Usage / 深度使用插件
+
+          ## Available Plugins / 可用插件
+          - `@deepseek-ai/dsh-tool-skill` - skill management
+          - `@deepseek-ai/dsh-tool-web` - web search
+          - `@deepseek-ai/dsh-tool-subagent` - subagent delegation
+          - `@deepseek-ai/dsh-tool-workflow` - workflow orchestration
+          - `@deepseek-ai/dsh-tool-todo` - task tracking
+          - `@deepseek-ai/dsh-tool-plan` - plan mode
+
+      - id: package-workspace
+        content: |
+          # Package Workspace Rules / 包工作区规则
+
+          ## AGENTS.md Generation / AGENTS.md生成
+          - Create root AGENTS.md on project init
+          - Create per-package AGENTS.md with dependencies
+          - Document exports and public API
+
+          ## Dependency Documentation / 依赖文档
+          ```markdown
+          ## Dependencies
+          - @deepseek-ai/cordis: ^1.0.0
+          - @deepseek-ai/dsh-brand: workspace:*
+
+          ## Exports
+          - MyService: default export
+          - Types: named exports
+          ```
+
+#  Tool Rows
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+
+- id: tool-read
+  name: '@deepseek-ai/dsh-tool-read'
+
+- id: tool-write
+  name: '@deepseek-ai/dsh-tool-write'
+
+- id: tool-edit
+  name: '@deepseek-ai/dsh-tool-edit'
+
+- id: tool-glob
+  name: '@deepseek-ai/dsh-tool-glob'
+
+- id: tool-grep
+  name: '@deepseek-ai/dsh-tool-grep'
+
+- id: tool-web-search
+  name: '@deepseek-ai/dsh-tool-web'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+
+- id: tool-subagent
+  name: '@deepseek-ai/dsh-tool-subagent'
+
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'

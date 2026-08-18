@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Request, Response, NextFunction } from 'express'
 import type { Store, ChannelRow } from './db.js'
 import type { EnvConfig } from './config.js'
-import { maskKey, dayStart, parseJsonArray, now, jsonStr } from './util.js'
+import { maskKey, dayStart, now } from './util.js'
 import { getBalance } from './billing.js'
 
 export function adminRouter(store: Store, cfg: EnvConfig): Router {
@@ -18,6 +18,8 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     next()
   })
 
+  // ---- keys ----
+
   r.get('/keys', (_req, res) => {
     res.json(store.listKeys())
   })
@@ -25,12 +27,15 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
   r.post('/keys', (req, res) => {
     const name = String(req.body?.name ?? '新密钥').trim() || '新密钥'
     const note = String(req.body?.note ?? '').trim()
-    const key = store.addKey(name, note)
+    const groupId = Number(req.body?.groupId ?? 1)
+    const key = store.addKey(name, note, groupId)
     res.json(key)
   })
 
   r.patch('/keys/:id', (req, res) => {
-    const row = store.updateKey(req.params.id, req.body ?? {})
+    const patch = req.body ?? {}
+    if (patch.groupId !== undefined) patch.group_id = Number(patch.groupId)
+    const row = store.updateKey(req.params.id, patch)
     if (!row) return res.status(404).json({ message: 'key not found' })
     res.json(row)
   })
@@ -39,6 +44,36 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     if (!store.deleteKey(req.params.id)) return res.status(404).json({ message: 'key not found' })
     res.json({ ok: true })
   })
+
+  // ---- groups ----
+
+  r.get('/groups', (_req, res) => {
+    res.json(store.listGroups())
+  })
+
+  r.post('/groups', (req, res) => {
+    const body = req.body ?? {}
+    if (!String(body.name ?? '').trim()) return res.status(400).json({ message: 'name is required' })
+    const row = store.createGroup(body)
+    res.json(row)
+  })
+
+  r.patch('/groups/:id', (req, res) => {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'bad id' })
+    const row = store.updateGroup(id, req.body ?? {})
+    if (!row) return res.status(404).json({ message: 'group not found' })
+    res.json(row)
+  })
+
+  r.delete('/groups/:id', (req, res) => {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id)) return res.status(400).json({ message: 'bad id' })
+    if (!store.deleteGroup(id)) return res.status(400).json({ message: '默认分组不可删除' })
+    res.json({ ok: true })
+  })
+
+  // ---- usage ----
 
   r.get('/usage', (req, res) => {
     const q = req.query
@@ -65,10 +100,10 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
       channelId: q.channelId !== undefined ? Number(q.channelId) : undefined,
       size: 100000,
     })
-    const head = 'ts,channel,model,key,prompt_tokens,completion_tokens,total_tokens,cost,latency_ms,status,request_id'
+    const head = 'ts,channel,model,key,group,rate,prompt_tokens,completion_tokens,total_tokens,cost,latency_ms,status,request_id'
     const lines = rows.map((r) =>
       [
-        new Date(r.ts).toISOString(), r.channel_name, r.model, r.key_name,
+        new Date(r.ts).toISOString(), r.channel_name, r.model, r.key_name, r.group_name, r.rate,
         r.prompt_tokens, r.completion_tokens, r.total_tokens, r.cost.toFixed(6),
         r.latency_ms ?? '', r.status === 0 ? 'ok' : 'error', r.request_id,
       ].join(','),
@@ -95,13 +130,16 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
       series: seriesDays(store, 7),
       byChannel: store.groupByChannel(),
       byModel: store.groupByModel(),
+      byGroup: store.groupUsage(),
       topKeys: store.topKeys(5),
       channels: channels.map((c) => ({
-        id: c.id, name: c.name, models: c.models, enabled: c.enabled,
+        id: c.id, name: c.name, provider: c.provider, models: c.models, enabled: c.enabled,
         theme_color: c.theme_color, balance: balanceMap[c.id] ?? { source: 'estimate', amount: c.credit },
       })),
     })
   })
+
+  // ---- channels ----
 
   r.get('/channels', async (_req, res) => {
     const rows = store.listChannels()
@@ -156,18 +194,16 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     }
   })
 
+  // ---- settings ----
+
   r.get('/settings', (_req, res) => {
-    const main = cfg.channels[0]
     res.json({
       version: '0.1.0',
       env: {
         port: cfg.port,
         host: cfg.host,
         adminToken: cfg.adminToken ? 'set' : 'unset',
-        defaultModel: cfg.defaultModel,
-        baseUrl: main ? maskUrl(main.baseUrl) : '',
         dataDir: cfg.dataDir,
-        apiKeySet: !!main?.apiKey,
         modelMap: cfg.modelMap,
       },
       defaults: {
@@ -192,10 +228,11 @@ function normalizeChannelInput(body: Record<string, unknown>): Record<string, un
   if (typeof out.models === 'string') {
     out.models = out.models.split(',').map((s) => String(s).trim()).filter(Boolean)
   }
-  if ('price_in' in out && typeof out.price_in === 'string') out.price_in = Number(out.price_in)
-  if ('price_out' in out && typeof out.price_out === 'string') out.price_out = Number(out.price_out)
-  if ('credit' in out && typeof out.credit === 'string') out.credit = Number(out.credit)
+  for (const k of ['price_in', 'price_out', 'credit'] as const) {
+    if (typeof out[k] === 'string') out[k] = Number(out[k])
+  }
   if ('enabled' in out && typeof out.enabled === 'string') out.enabled = out.enabled === '1' || out.enabled === 'true' ? 1 : 0
+  if ('inject_system_enabled' in out && typeof out.inject_system_enabled === 'string') out.inject_system_enabled = out.inject_system_enabled === '1' || out.inject_system_enabled === 'true' ? 1 : 0
   return out
 }
 
@@ -203,6 +240,7 @@ function publicChannel(c: ChannelRow): Record<string, unknown> {
   return {
     id: c.id,
     name: c.name,
+    provider: c.provider,
     base_url: c.base_url,
     api_key_masked: maskKey(c.api_key),
     models: c.models,
@@ -213,21 +251,10 @@ function publicChannel(c: ChannelRow): Record<string, unknown> {
     theme_name: c.theme_name,
     theme_color: c.theme_color,
     icon_svg: c.icon_svg,
+    inject_system_prompt: c.inject_system_prompt,
+    inject_system_enabled: c.inject_system_enabled,
     enabled: c.enabled,
     created_at: c.created_at,
-  }
-}
-
-function rounded(n: number): number {
-  return Math.round(n * 10000) / 10000
-}
-
-function maskUrl(u: string): string {
-  try {
-    const url = new URL(u)
-    return url.protocol + '//' + url.host
-  } catch {
-    return maskKey(u)
   }
 }
 

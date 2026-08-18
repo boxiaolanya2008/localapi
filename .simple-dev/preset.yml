@@ -1,0 +1,5 @@
+name: 简洁开发 / Simple Dev
+description: |
+  极简代码风格，禁止装饰符注释，禁止emoji（SVG替代），自动PR/GitHub规范文件。
+  Minimal code style, no ornamental comments, no emoji (use SVG), auto PR + GitHub standard files.
+order: 10

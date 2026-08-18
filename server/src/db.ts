@@ -1,12 +1,12 @@
 import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { EnvChannel } from './config.js'
 import { genKey, hashKey, parseJsonArray, uuid, now } from './util.js'
 
 export interface ChannelRow {
   id: number
   name: string
+  provider: string
   base_url: string
   api_key: string
   models: string[]
@@ -17,6 +17,8 @@ export interface ChannelRow {
   theme_name: string
   theme_color: string
   icon_svg: string
+  inject_system_prompt: string
+  inject_system_enabled: number
   enabled: number
   created_at: number
 }
@@ -28,11 +30,23 @@ export interface KeyRow {
   key_hash: string
   status: number
   note: string
+  group_id: number
+  group_name: string
+  group_multiplier: number
   created_at: number
   last_used_at: number | null
   total_prompt_tokens: number
   total_completion_tokens: number
   request_count: number
+}
+
+export interface GroupRow {
+  id: number
+  name: string
+  multiplier: number
+  model_limit: string[]
+  note: string
+  created_at: number
 }
 
 export interface UsageRow {
@@ -43,6 +57,9 @@ export interface UsageRow {
   model: string
   key_id: string | null
   key_name: string
+  group_id: number | null
+  group_name: string
+  rate: number
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
@@ -54,11 +71,14 @@ export interface UsageRow {
 }
 
 const CHANNEL_FIELDS = new Set([
-  'name', 'base_url', 'api_key', 'models', 'price_in', 'price_out', 'credit',
-  'billing_endpoint', 'theme_name', 'theme_color', 'icon_svg', 'enabled',
+  'name', 'provider', 'base_url', 'api_key', 'models', 'price_in', 'price_out', 'credit',
+  'billing_endpoint', 'theme_name', 'theme_color', 'icon_svg',
+  'inject_system_prompt', 'inject_system_enabled', 'enabled',
 ])
 
-const KEY_FIELDS = new Set(['name', 'status', 'note'])
+const KEY_FIELDS = new Set(['name', 'status', 'note', 'group_id'])
+
+const GROUP_FIELDS = new Set(['name', 'multiplier', 'model_limit', 'note'])
 
 interface BalanceCacheRow {
   channel_id: number
@@ -100,6 +120,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS channels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
+        provider TEXT NOT NULL DEFAULT '',
         base_url TEXT NOT NULL,
         api_key TEXT NOT NULL,
         models TEXT NOT NULL DEFAULT '[]',
@@ -110,6 +131,8 @@ export class Store {
         theme_name TEXT NOT NULL DEFAULT '默认',
         theme_color TEXT NOT NULL DEFAULT '#10b981',
         icon_svg TEXT NOT NULL DEFAULT '',
+        inject_system_prompt TEXT NOT NULL DEFAULT '',
+        inject_system_enabled INTEGER NOT NULL DEFAULT 0,
         enabled INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL
       );
@@ -121,6 +144,9 @@ export class Store {
         model TEXT,
         key_id TEXT,
         key_name TEXT,
+        group_id INTEGER,
+        group_name TEXT,
+        rate REAL NOT NULL DEFAULT 1,
         prompt_tokens INTEGER NOT NULL DEFAULT 0,
         completion_tokens INTEGER NOT NULL DEFAULT 0,
         total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -144,11 +170,42 @@ export class Store {
         value TEXT
       );
     `)
+
+    this.ensureColumn('api_keys', 'group_id', 'INTEGER NOT NULL DEFAULT 1')
+    this.ensureColumn('channels', 'provider', "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn('channels', 'inject_system_prompt', "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn('channels', 'inject_system_enabled', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('usage', 'group_id', 'INTEGER')
+    this.ensureColumn('usage', 'group_name', "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn('usage', 'rate', 'REAL NOT NULL DEFAULT 1')
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        multiplier REAL NOT NULL DEFAULT 1,
+        model_limit TEXT NOT NULL DEFAULT '[]',
+        note TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+    `)
+    const n = (this.db.prepare('SELECT COUNT(*) AS c FROM groups').get() as { c: number }).c
+    if (n === 0) {
+      this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('默认', 1, '原价计费', now())
+      this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('体验价', 0.5, '半价,适合内部试用', now())
+      this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('破甲', 0, '释放全部性能,不限速', now())
+    }
+  }
+
+  private ensureColumn(table: string, column: string, ddl: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    if (cols.some((c) => c.name === column)) return
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`)
   }
 
   // ---- channels ----
 
-  seedChannels(list: EnvChannel[]): void {
+  seedChannels(list: { name: string; baseUrl: string; apiKey: string; models: string[]; priceIn: number; priceOut: number; credit: number; billingEndpoint: string }[]): void {
     const n = (this.db.prepare('SELECT COUNT(*) AS c FROM channels').get() as { c: number }).c
     if (n > 0) return
     const ins = this.db.prepare(
@@ -180,7 +237,7 @@ export class Store {
     const models = Array.isArray(input.models) ? JSON.stringify(input.models) : JSON.stringify([])
     const res = this.db
       .prepare(
-        'INSERT INTO channels (name, base_url, api_key, models, price_in, price_out, credit, billing_endpoint, theme_name, theme_color, icon_svg, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO channels (name, base_url, api_key, models, price_in, price_out, credit, billing_endpoint, provider, theme_name, theme_color, icon_svg, inject_system_prompt, inject_system_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         String(input.name ?? 'channel'),
@@ -191,9 +248,12 @@ export class Store {
         Number(input.price_out ?? 0),
         Number(input.credit ?? 0),
         String(input.billing_endpoint ?? ''),
+        String(input.provider ?? ''),
         String(input.theme_name ?? '默认'),
         String(input.theme_color ?? '#10b981'),
         String(input.icon_svg ?? ''),
+        String(input.inject_system_prompt ?? ''),
+        Number(input.inject_system_enabled ?? 0),
         now(),
       )
     const id = Number(res.lastInsertRowid)
@@ -219,34 +279,90 @@ export class Store {
     return r.s
   }
 
+  // ---- groups ----
+
+  listGroups(): GroupRow[] {
+    const rows = this.db.prepare('SELECT * FROM groups ORDER BY id').all() as Record<string, unknown>[]
+    return rows.map((r) => ({ ...(r as unknown as GroupRow), model_limit: parseJsonArray(String(r.model_limit ?? '[]')) }))
+  }
+
+  getGroup(id: number): GroupRow | null {
+    const r = this.db.prepare('SELECT * FROM groups WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    return r ? { ...(r as unknown as GroupRow), model_limit: parseJsonArray(String(r.model_limit ?? '[]')) } : null
+  }
+
+  createGroup(input: Record<string, unknown>): GroupRow | null {
+    const res = this.db
+      .prepare('INSERT INTO groups (name, multiplier, model_limit, note, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(
+        String(input.name ?? '新分组'),
+        Number(input.multiplier ?? 1),
+        JSON.stringify(Array.isArray(input.model_limit) ? input.model_limit : []),
+        String(input.note ?? ''),
+        now(),
+      )
+    return this.getGroup(Number(res.lastInsertRowid))
+  }
+
+  updateGroup(id: number, patch: Record<string, unknown>): GroupRow | null {
+    const cols = Object.keys(patch).filter((c) => GROUP_FIELDS.has(c) && patch[c] !== undefined)
+    if (!cols.length) return this.getGroup(id)
+    const sets = cols.map((c) => `${c} = ?`).join(', ')
+    const vals = cols.map((c) => (c === 'model_limit' ? JSON.stringify(patch[c]) : patch[c])) as (string | number)[]
+    this.db.prepare(`UPDATE groups SET ${sets} WHERE id = ?`).run(...vals, id)
+    return this.getGroup(id)
+  }
+
+  deleteGroup(id: number): boolean {
+    if (id === 1) return false
+    const res = this.db.prepare('DELETE FROM groups WHERE id = ?').run(id)
+    if (res.changes > 0) {
+      this.db.prepare('UPDATE api_keys SET group_id = 1 WHERE group_id = ?').run(id)
+    }
+    return res.changes > 0
+  }
+
+  groupUsage(): { group_name: string; tokens: number; requests: number; cost: number }[] {
+    return this.db
+      .prepare(
+        'SELECT COALESCE(group_name, key_name) AS group_name, COUNT(*) AS requests, SUM(total_tokens) AS tokens, SUM(cost) AS cost FROM usage GROUP BY group_name ORDER BY cost DESC'
+      )
+      .all() as unknown as { group_name: string; requests: number; tokens: number; cost: number }[]
+  }
+
   // ---- api keys ----
 
-  addKey(name: string, note: string): KeyRow {
+  private keySelect = `
+    SELECT k.*, g.name AS group_name, g.multiplier AS group_multiplier
+    FROM api_keys k LEFT JOIN groups g ON g.id = k.group_id
+  `
+
+  addKey(name: string, note: string, groupId = 1): KeyRow {
     const key = genKey()
     const id = uuid()
     const hash = hashKey(key)
     this.db
-      .prepare('INSERT INTO api_keys (id, name, key, key_hash, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, name, key, hash, note, now())
+      .prepare('INSERT INTO api_keys (id, name, key, key_hash, note, group_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, name, key, hash, note, groupId, now())
     return this.getKeyById(id) as KeyRow
   }
 
   private mapKey(r: Record<string, unknown>): KeyRow {
-    return r as unknown as KeyRow
+    return { ...(r as unknown as KeyRow), group_id: Number(r.group_id ?? 1), group_multiplier: Number(r.group_multiplier ?? 1) }
   }
 
   getKeyById(id: string): KeyRow | null {
-    const r = this.db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as Record<string, unknown> | undefined
+    const r = this.db.prepare(this.keySelect + ' WHERE k.id = ?').get(id) as Record<string, unknown> | undefined
     return r ? this.mapKey(r) : null
   }
 
   getKeyByHash(hash: string): KeyRow | null {
-    const r = this.db.prepare('SELECT * FROM api_keys WHERE key_hash = ?').get(hash) as Record<string, unknown> | undefined
+    const r = this.db.prepare(this.keySelect + ' WHERE k.key_hash = ?').get(hash) as Record<string, unknown> | undefined
     return r ? this.mapKey(r) : null
   }
 
   listKeys(): KeyRow[] {
-    const rows = this.db.prepare('SELECT * FROM api_keys ORDER BY created_at DESC').all() as Record<string, unknown>[]
+    const rows = this.db.prepare(this.keySelect + ' ORDER BY k.created_at DESC').all() as Record<string, unknown>[]
     return rows.map((r) => this.mapKey(r))
   }
 
@@ -280,6 +396,9 @@ export class Store {
     model: string
     keyId: string | null
     keyName: string
+    groupId: number | null
+    groupName: string
+    rate: number
     promptTokens: number
     completionTokens: number
     cost: number
@@ -290,10 +409,10 @@ export class Store {
   }): void {
     this.db
       .prepare(
-        'INSERT INTO usage (ts, channel_id, channel_name, model, key_id, key_name, prompt_tokens, completion_tokens, total_tokens, cost, latency_ms, status, error, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO usage (ts, channel_id, channel_name, model, key_id, key_name, group_id, group_name, rate, prompt_tokens, completion_tokens, total_tokens, cost, latency_ms, status, error, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
-        now(), u.channelId, u.channelName, u.model, u.keyId, u.keyName,
+        now(), u.channelId, u.channelName, u.model, u.keyId, u.keyName, u.groupId, u.groupName, u.rate,
         u.promptTokens, u.completionTokens, u.promptTokens + u.completionTokens,
         u.cost, u.latencyMs, u.status, u.error, u.requestId,
       )

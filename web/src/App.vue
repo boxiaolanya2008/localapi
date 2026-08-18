@@ -17,6 +17,8 @@ const menus = [
   { name: 'dashboard', path: '/', label: '仪表盘', icon: 'mdi:view-dashboard-outline' },
   { name: 'keys', path: '/keys', label: '密钥管理', icon: 'mdi:key-outline' },
   { name: 'channels', path: '/channels', label: '渠道管理', icon: 'mdi:server-network' },
+  { name: 'groups', path: '/groups', label: '分组管理', icon: 'mdi:account-group-outline' },
+  { name: 'catalog', path: '/catalog', label: '模型目录', icon: 'mdi:book-open-page-variant-outline' },
   { name: 'usage', path: '/usage', label: '使用记录', icon: 'mdi:chart-timeline-variant' },
   { name: 'settings', path: '/settings', label: '设置', icon: 'mdi:cog-outline' },
 ]

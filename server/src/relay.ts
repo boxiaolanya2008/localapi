@@ -36,24 +36,42 @@ export function relayRouter(store: Store, cfg: EnvConfig): Router {
 function pickChannel(store: Store, cfg: EnvConfig, model?: string): { channel: ChannelRow; upstreamModel: string } | null {
   const chs = store.listChannels().filter((c) => c.enabled === 1)
   if (!chs.length) return null
-  const local = model || cfg.defaultModel
+  const local = model ?? ''
   const mapped = cfg.modelMap[local] ?? local
-  const hit =
-    chs.find((c) => c.models.includes(mapped)) ??
-    chs.find((c) => c.models.includes(local)) ??
-    chs.find((c) => c.models.includes('*'))
-  return { channel: hit ?? chs[0], upstreamModel: mapped }
+  let hit: ChannelRow | undefined
+  if (local) {
+    hit =
+      chs.find((c) => c.models.includes(mapped)) ??
+      chs.find((c) => c.models.includes(local)) ??
+      chs.find((c) => c.models.includes('*'))
+  }
+  const channel = hit ?? chs[0]
+  return { channel, upstreamModel: mapped || channel.models[0] || local }
+}
+
+// 组装发往上游的 body。默认原样透传(100% 纯度);只有渠道显式开启注入且请求未带 system 消息时才补一条
+function buildUpstreamBody(channel: ChannelRow, body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...body }
+  if (
+    channel.inject_system_enabled === 1 &&
+    channel.inject_system_prompt.trim() &&
+    Array.isArray(body.messages) &&
+    !(body.messages as { role?: string }[]).some((m) => m?.role === 'system')
+  ) {
+    out.messages = [{ role: 'system', content: channel.inject_system_prompt }, ...(body.messages as unknown[])]
+  }
+  return out
 }
 
 async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: Store): Promise<void> {
   const key = (req as Req & { localkey: KeyRow }).localkey
   const started = now()
   const body = req.body ?? {}
-  const model = typeof body.model === 'string' && body.model ? body.model : cfg.defaultModel
+  const model = typeof body.model === 'string' && body.model ? body.model : undefined
   const picked = pickChannel(store, cfg, model)
   if (!picked) return openaiError(res, 400, 'no_channel', 'no enabled channel available')
 
-  const upstreamBody = { ...body, model: picked.upstreamModel }
+  const upstreamBody = { ...buildUpstreamBody(picked.channel, body), model: picked.upstreamModel }
   const url = picked.channel.base_url.replace(/\/+$/, '') + '/' + path
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), body.stream ? STREAM_TIMEOUT_MS : RELAY_TIMEOUT_MS)
@@ -72,18 +90,18 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   } catch (err) {
     clearTimeout(timer)
     const msg = (err as Error).name === 'AbortError' ? 'upstream timeout' : String((err as Error).message ?? err)
-    recordError(store, key, picked.channel, model, started, msg, uuid())
+    recordError(store, key, picked.channel, model ?? '', started, msg, uuid())
     return openaiError(res, 502, 'upstream_error', msg)
   }
   clearTimeout(timer)
 
   if (body.stream) {
-    return handleStream(res, upstream, store, key, picked.channel, model, started, upstreamBody)
+    return handleStream(res, upstream, store, key, picked.channel, model ?? '', started, upstreamBody)
   }
 
   const payload = await upstream.text()
   if (!upstream.ok) {
-    recordError(store, key, picked.channel, model, started, payload.slice(0, 500), uuid())
+    recordError(store, key, picked.channel, model ?? '', started, payload.slice(0, 500), uuid())
     res.status(upstream.status).set('content-type', 'application/json').send(payload)
     return
   }
@@ -97,7 +115,7 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const usage = data && typeof data.usage === 'object' ? (data.usage as Record<string, unknown>) : null
   const pt = usage && Number.isFinite(Number(usage.prompt_tokens)) ? Number(usage.prompt_tokens) : estimateTokens(jsonStr(upstreamBody))
   const ct = usage && Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : estimateTokens(payload)
-  recordOk(store, key, picked.channel, model, started, pt, ct, uuid(), null)
+  recordOk(store, key, picked.channel, model ?? '', started, pt, ct, uuid(), null)
   res.set('content-type', 'application/json').status(upstream.status).send(payload)
 }
 
@@ -105,17 +123,21 @@ function recordOk(
   store: Store, key: KeyRow, channel: ChannelRow, model: string, started: number,
   pt: number, ct: number, requestId: string, latencyMs: number | null,
 ): void {
-  const cost = costFor(channel, pt, ct)
+  const rate = key.group_multiplier || 1
+  const cost = costFor(channel, pt, ct) * rate
   store.addUsage({
     channelId: channel.id, channelName: channel.name, model, keyId: key.id, keyName: key.name,
+    groupId: key.group_id, groupName: key.group_name, rate,
     promptTokens: pt, completionTokens: ct, cost, latencyMs: latencyMs ?? now() - started, status: 0, error: null, requestId,
   })
   store.bumpKey(key.id, pt, ct)
 }
 
 function recordError(store: Store, key: KeyRow, channel: ChannelRow, model: string, started: number, error: string, requestId: string): void {
+  const rate = key.group_multiplier || 1
   store.addUsage({
     channelId: channel.id, channelName: channel.name, model, keyId: key.id, keyName: key.name,
+    groupId: key.group_id, groupName: key.group_name, rate,
     promptTokens: 0, completionTokens: 0, cost: 0, latencyMs: now() - started, status: 1, error, requestId,
   })
   store.bumpKey(key.id, 0, 0)

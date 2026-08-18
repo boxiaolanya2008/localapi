@@ -43,9 +43,6 @@ const modelMapEntries = computed(() => Object.entries(info.value?.env?.modelMap 
             <div class="kv-row"><span class="k">管理令牌</span>
               <span class="v"><el-tag size="small" :type="env().adminToken === 'set' ? 'success' : 'danger'" effect="plain">{{ env().adminToken === 'set' ? '已配置' : '未配置' }}</el-tag></span>
             </div>
-            <div class="kv-row"><span class="k">主渠道地址</span><span class="v mono">{{ env().baseUrl || '未配置' }}</span></div>
-            <div class="kv-row"><span class="k">上游密钥</span><span class="v">{{ env().apiKeySet ? '已配置' : '未配置' }}</span></div>
-            <div class="kv-row"><span class="k">默认模型</span><span class="v mono">{{ env().defaultModel }}</span></div>
             <div class="kv-row"><span class="k">数据目录</span><span class="v mono">{{ env().dataDir }}</span></div>
             <div class="kv-row"><span class="k">模型映射</span>
               <span class="v">

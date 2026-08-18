@@ -5,9 +5,12 @@
 特性：
 
 - OpenAI 兼容接口：`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/models`，支持 stream 流式透传
-- 从 `.env` 读上游 api/model/key，多渠道路由 + 模型名映射
-- Vue 3 管理台：密钥管理、使用记录、渠道主题、今日 Token、余额、7 日图表
-- 余额两种来源自动切换：上游 billing 接口实时查，失败退回「额度 − 累计消耗」本地估算
+- **渠道、API Key、模型全部在管理界面录入**，不再依赖 .env；可选模型名映射
+- 内置 2026 热门模型价格目录：每百万 token 输入/输出/缓存命中价（DeepSeek V4、Kimi K3/K2 系已按官方页联网核实，其余标注参考价），一键导入渠道自动带出价格
+- 内置 19 家提供商官方 logo（OpenAI/Anthropic/Gemini/DeepSeek/Kimi/通义/豆包/混元/文心/Grok/GLM/硅基流动等），选提供商自动填官方接口地址，也可改地址指向任意兼容服务
+- **分组计费**：自定义倍率，0 = 免费破甲、0.5 = 半价、1 = 原价、>1 = 加价；分组可限制模型；密钥归属分组，费用按倍率计算
+- 内置系统提示词预设（中文助手/代码专家/写作润色等）；默认关闭注入 = 请求 100% 原样透传
+- Vue 3 管理台：密钥、渠道、分组、模型目录、使用记录、仪表盘图表、余额（实时/估算双源）
 - 数据存 SQLite（Node 内置 `node:sqlite`，零额外依赖）
 - 默认只监听 127.0.0.1
 
@@ -43,14 +46,16 @@ export OPENAI_BASE_URL=http://127.0.0.1:3000/v1
 export OPENAI_API_KEY=sk-lapi-xxx   # 在管理网页「密钥管理」里创建
 ```
 
-浏览器打开 http://127.0.0.1:3000 ，输入 `.env` 里的 ADMIN_TOKEN 进入管理台。
+浏览器打开 http://127.0.0.1:3000 ，输入 `.env` 里的 ADMIN_TOKEN 进入管理台。首次使用：模型目录 → 添加为渠道 → 填你申请的 API Key → 保存；密钥管理 → 建密钥并选分组 → 把密钥给 CLI 工具用。
 
 ## 目录结构
 
 ```
-server/  后端: Express + node:sqlite,中转与管理接口
-web/     前端: Vue 3 + Element Plus + ECharts
-data/    运行时数据(SQLite),已 gitignore
+server/   后端: Express + node:sqlite,中转与管理接口
+web/      前端: Vue 3 + Element Plus + ECharts
+  src/constants/   模型价格目录、提供商 logo、提示词预设
+tools/    mock 上游与冒烟/实机验证脚本
+data/     运行时数据(SQLite),已 gitignore
 ```
 
 ## License

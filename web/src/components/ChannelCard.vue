@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import { PROVIDERS } from '@/constants/providers'
 import api from '@/api'
 
 const props = defineProps<{ channel: any }>()
@@ -47,10 +48,11 @@ async function remove() {
 <template>
   <div class="chan-card card">
     <div class="topbar" :style="{ background: `linear-gradient(90deg, ${channel.theme_color}, transparent)` }"></div>
-    <div class="head">
-      <div class="icon-badge" :style="{ background: channel.theme_color + '22', color: channel.theme_color }">
-        <el-icon :size="22"><Icon :icon="channel.icon_svg || 'mdi:server-network'" /></el-icon>
-      </div>
+<div class="head">
+        <div class="icon-badge" :style="{ background: channel.theme_color + '22', color: channel.theme_color }">
+          <span v-if="PROVIDERS[channel.provider]" class="prov-logo" :style="{ color: PROVIDERS[channel.provider].color }" v-html="PROVIDERS[channel.provider].svg"></span>
+          <el-icon v-else :size="22"><Icon :icon="channel.icon_svg || 'mdi:server-network'" /></el-icon>
+        </div>
       <div class="name-wrap">
         <div class="name">{{ channel.name }}
           <el-tag v-if="channel.balance?.source === 'live'" size="small" type="success" effect="plain">实时余额</el-tag>
@@ -111,6 +113,17 @@ async function remove() {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.prov-logo {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+
+  :deep(svg) {
+    width: 26px;
+    height: 26px;
+  }
 }
 
 .name {

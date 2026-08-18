@@ -205,6 +205,29 @@ test('usage export returns csv', async () => {
   assert.ok(String(r.data).startsWith('ts,channel'))
 })
 
+test('group multiplier halves the billed cost', async () => {
+  const g = await req('/admin/groups', { token: 'test-admin-token', method: 'POST', body: { name: '半价', multiplier: 0.5 } })
+  assert.equal(g.status, 200)
+  const gid = (g.data as { id: number }).id
+
+  const created = await req('/admin/keys', { token: 'test-admin-token', body: { name: 'group-cli', groupId: gid } })
+  const key = (created.data as { key: string; group_name: string }).key
+  assert.equal((created.data as { group_name: string }).group_name, '半价')
+
+  await req('/v1/chat/completions', { key, body: { model: 'demo-model', messages: [{ role: 'user', content: 'hi' }] } })
+  const usage = await req('/admin/usage', { token: 'test-admin-token' })
+  const row = (usage.data as { rows: { key_name: string; cost: number; rate: number; group_name: string }[] }).rows[0]
+  assert.equal(row.key_name, 'group-cli')
+  assert.equal(row.rate, 0.5)
+  // 原价 = 11/1000*0.001 + 4/1000*0.002 = 0.000019,半价 = 0.0000095
+  assert.ok(Math.abs(row.cost - 0.0000095) < 1e-12, `cost=${row.cost}`)
+})
+
+test('default group protects default keys when deleting group', async () => {
+  const r = await req('/admin/groups/1', { token: 'test-admin-token', method: 'DELETE' })
+  assert.equal(r.status, 400)
+})
+
 test('channel test endpoint pings mock upstream', async () => {
   const r = await req('/admin/channels', { token: 'test-admin-token' })
   const id = (r.data as { id: number }[])[0].id

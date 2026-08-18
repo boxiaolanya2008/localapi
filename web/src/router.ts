@@ -8,6 +8,8 @@ const routes = [
   { path: '/', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { title: '仪表盘' } },
   { path: '/keys', name: 'keys', component: () => import('@/views/KeysView.vue'), meta: { title: '密钥管理' } },
   { path: '/channels', name: 'channels', component: () => import('@/views/ChannelsView.vue'), meta: { title: '渠道管理' } },
+  { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { title: '分组管理' } },
+  { path: '/catalog', name: 'catalog', component: () => import('@/views/CatalogView.vue'), meta: { title: '模型目录' } },
   { path: '/usage', name: 'usage', component: () => import('@/views/UsageView.vue'), meta: { title: '使用记录' } },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '设置' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },

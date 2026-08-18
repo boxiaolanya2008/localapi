@@ -44,7 +44,7 @@ const balance = computed(() =>
 )
 
 const cards = computed(() => [
-  { title: '今日 Token', value: stats.value?.today.tokens ?? 0, icon: 'mdi:token-outline', color: '#10b981', hint: `累计 ${fmt(totalTokens.value, 0)}` },
+  { title: '今日 Token', value: stats.value?.today.tokens ?? 0, icon: 'mdi:lightning-bolt-outline', color: '#10b981', hint: `累计 ${fmt(totalTokens.value, 0)}` },
   { title: '今日请求', value: stats.value?.today.requests ?? 0, icon: 'mdi:send-check-outline', color: '#3b82f6', hint: `累计 ${fmt(stats.value?.total.requests ?? 0, 0)} 次` },
   { title: '总消耗', value: totalCost.value, digits: 4, icon: 'mdi:currency-cny', color: '#f59e0b', hint: '按单价折算' },
   { title: '当前余额', value: balance.value, digits: 2, icon: 'mdi:wallet-outline', color: '#8b5cf6', hint: '实时/估算混合' },
@@ -142,13 +142,25 @@ const barOption = computed<any>(() => {
     </el-row>
 
     <el-row :gutter="16" class="mt16">
-      <el-col :span="14" :xs="24">
+      <el-col :span="12" :xs="24">
         <div class="card chart-card">
           <div class="card-title">模型用量 TOP</div>
           <VChart class="chart" :option="barOption" :theme="chartTheme" autoresize />
         </div>
       </el-col>
-      <el-col :span="10" :xs="24">
+      <el-col :span="6" :xs="24">
+        <div class="card">
+          <div class="card-title">分组消费</div>
+          <div v-if="!stats?.byGroup?.length" class="muted">暂无数据</div>
+          <div v-for="g in stats?.byGroup" :key="g.group_name" class="chan-row">
+            <span class="dot" style="background: #f59e0b"></span>
+            <span class="chan-name">{{ g.group_name }}</span>
+            <span class="muted">{{ g.requests }} 次</span>
+            <span class="chan-balance mono">{{ fmt(g.cost) }}</span>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="6" :xs="24">
         <div class="card">
           <div class="card-title">渠道余额</div>
           <div v-if="!stats?.channels?.length" class="muted">暂无渠道,去渠道管理添加</div>

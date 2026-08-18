@@ -42,17 +42,17 @@ body {
 }
 
 .page {
-  animation: pageIn 0.4s ease both;
+  animation: pageFade 0.35s ease both;
 }
 
-@keyframes pageIn {
+// 注意:pageIn 原版动画带 transform,fill-mode 会残留一个矩阵 transform,
+// 给弹窗遮罩的 fixed 定位建了包含块,导致对话框被背景盖住。这里只用透明度。
+@keyframes pageFade {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

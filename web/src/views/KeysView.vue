@@ -7,16 +7,18 @@ import api from '@/api'
 
 const loading = ref(false)
 const keys = ref<any[]>([])
+const groups = ref<any[]>([])
 const dialogVisible = ref(false)
 const resultVisible = ref(false)
 const createdKey = ref<any>(null)
-const form = ref({ name: '', note: '' })
+const form = ref({ name: '', note: '', groupId: 1 })
 
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/admin/keys')
-    keys.value = data
+    const [k, g] = await Promise.all([api.get('/admin/keys'), api.get('/admin/groups')])
+    keys.value = k.data
+    groups.value = g.data
   } finally {
     loading.value = false
   }
@@ -25,7 +27,7 @@ async function load() {
 onMounted(load)
 
 function openCreate() {
-  form.value = { name: '', note: '' }
+  form.value = { name: '', note: '', groupId: 1 }
   dialogVisible.value = true
 }
 
@@ -34,11 +36,20 @@ async function create() {
     ElMessage.warning('填个名字')
     return
   }
-  const { data } = await api.post('/admin/keys', form.value)
+  const { data } = await api.post('/admin/keys', {
+    name: form.value.name.trim(),
+    note: form.value.note,
+    groupId: Number(form.value.groupId),
+  })
   createdKey.value = data
   dialogVisible.value = false
   resultVisible.value = true
   load()
+}
+
+async function changeGroup(row: any) {
+  await api.patch(`/admin/keys/${row.id}`, { groupId: row.group_id })
+  row.group_name = groups.value.find((g) => g.id === row.group_id)?.name ?? row.group_name
 }
 
 async function toggle(row: any) {
@@ -86,7 +97,14 @@ function mask(k: string): string {
     <div class="card table-card">
       <el-table v-loading="loading" :data="keys" stripe>
         <el-table-column prop="name" label="名称" width="140" />
-        <el-table-column label="密钥" min-width="320">
+        <el-table-column label="分组" width="140">
+          <template #default="{ row }">
+            <el-select v-model="row.group_id" size="small" style="width: 118px" @change="changeGroup(row)">
+              <el-option v-for="g in groups" :key="g.id" :label="g.name + (g.multiplier !== 1 ? ' ×' + g.multiplier : '')" :value="g.id" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="密钥" min-width="300">
           <template #default="{ row }">
             <span class="mono">{{ mask(row.key) }}</span>
             <el-button link type="primary" @click="copy(row.key)">复制</el-button>
@@ -118,6 +136,11 @@ function mask(k: string): string {
       <el-form :model="form" label-width="60px">
         <el-form-item label="名称">
           <el-input v-model="form.name" placeholder="如：本机 CLI" />
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-select v-model="form.groupId" style="width: 100%">
+            <el-option v-for="g in groups" :key="g.id" :label="g.name + (g.multiplier === 0 ? '(免费破甲)' : g.multiplier !== 1 ? ' ×' + g.multiplier : '(原价)')" :value="g.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.note" placeholder="可选" />

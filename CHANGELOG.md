@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-08-18
+
+- 使用记录新增真实缓存命中列:从上游返回的 usage 提取缓存 token(兼容 prompt_tokens_details.cached_tokens / prompt_cache_hit_tokens / cache_read_input_tokens),流式与非流式均记录,含整体命中率汇总
+- 分组支持系统提示词注入(优先于渠道注入),「破甲」分组自动注入授权安全测试提示词(老库自动回填)
+- 仪表盘统计卡片等高
+- 修复分组消费历史数据空名显示
+
 ## 0.2.0 - 2026-08-18
 
 - 渠道/API Key/模型改为界面录入,去除 .env 注入渠道

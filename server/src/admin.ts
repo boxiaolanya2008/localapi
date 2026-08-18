@@ -100,11 +100,11 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
       channelId: q.channelId !== undefined ? Number(q.channelId) : undefined,
       size: 100000,
     })
-    const head = 'ts,channel,model,key,group,rate,prompt_tokens,completion_tokens,total_tokens,cost,latency_ms,status,request_id'
+    const head = 'ts,channel,model,key,group,rate,prompt_tokens,cached_tokens,completion_tokens,total_tokens,cost,latency_ms,status,request_id'
     const lines = rows.map((r) =>
       [
         new Date(r.ts).toISOString(), r.channel_name, r.model, r.key_name, r.group_name, r.rate,
-        r.prompt_tokens, r.completion_tokens, r.total_tokens, r.cost.toFixed(6),
+        r.prompt_tokens, r.cached_tokens, r.completion_tokens, r.total_tokens, r.cost.toFixed(6),
         r.latency_ms ?? '', r.status === 0 ? 'ok' : 'error', r.request_id,
       ].join(','),
     )

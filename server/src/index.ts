@@ -24,6 +24,11 @@ export function createApp(cfg: ReturnType<typeof loadConfig>, store: Store): exp
   app.use('/admin', adminRouter(store, cfg))
   app.use('/v1', relayRouter(store, cfg))
 
+  // 统一 JSON 错误,不让 Express 默认 HTML 错误页漏给调用方
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(500).json({ message: err.message || 'internal error' })
+  })
+
   const dist = path.join(repoRoot, 'dist-web')
   if (fs.existsSync(dist)) {
     app.use(express.static(dist))

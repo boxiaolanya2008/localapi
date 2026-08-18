@@ -14,6 +14,12 @@ const keyId = ref('')
 const channelId = ref<number>()
 const keys = ref<any[]>([])
 const channels = ref<any[]>([])
+const cacheStats = ref<any>(null)
+
+function hitRatio(cacheHit: number, promptTokens: number): string {
+  if (!cacheHit || !promptTokens) return '-'
+  return `${cacheHit} (${((cacheHit / promptTokens) * 100).toFixed(0)}%)`
+}
 
 async function load() {
   loading.value = true
@@ -25,9 +31,10 @@ async function load() {
     }
     if (keyId.value) params.keyId = keyId.value
     if (channelId.value) params.channelId = channelId.value
-    const { data } = await api.get('/admin/usage', { params })
-    rows.value = data.rows
-    total.value = data.total
+    const [u, s] = await Promise.all([api.get('/admin/usage', { params }), api.get('/admin/stats')])
+    rows.value = u.data.rows
+    total.value = u.data.total
+    cacheStats.value = s.data
   } finally {
     loading.value = false
   }
@@ -95,6 +102,12 @@ async function exportCsv() {
       <el-button @click="exportCsv">
         <el-icon class="mr8"><Icon icon="mdi:download-outline" /></el-icon>导出 CSV
       </el-button>
+      <el-tag v-if="cacheStats?.total?.cache_hit" type="success" effect="plain" class="cache-chip">
+        累计缓存命中 {{ ((cacheStats.total.cache_hit / cacheStats.total.tokens) * 100).toFixed(1) }}% ({{ cacheStats.total.cache_hit.toLocaleString() }} tokens)
+      </el-tag>
+      <el-tag v-if="cacheStats?.today?.cache_hit" type="success" effect="plain" class="cache-chip">
+        今日缓存命中 {{ ((cacheStats.today.cache_hit / cacheStats.today.tokens) * 100).toFixed(1) }}%
+      </el-tag>
     </div>
 
     <div class="card table-card">
@@ -105,9 +118,14 @@ async function exportCsv() {
         <el-table-column prop="channel_name" label="渠道" width="110" />
         <el-table-column prop="model" label="模型" width="140" />
         <el-table-column prop="key_name" label="密钥" width="100" />
-        <el-table-column prop="prompt_tokens" label="输入" width="90" align="right" />
-        <el-table-column prop="completion_tokens" label="输出" width="90" align="right" />
-        <el-table-column prop="total_tokens" label="合计" width="90" align="right" />
+        <el-table-column prop="prompt_tokens" label="输入" width="80" align="right" />
+        <el-table-column label="缓存命中" width="120" align="right">
+          <template #default="{ row }">
+            <span class="mono">{{ hitRatio(row.cached_tokens, row.prompt_tokens) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="completion_tokens" label="输出" width="80" align="right" />
+        <el-table-column prop="total_tokens" label="合计" width="80" align="right" />
         <el-table-column label="费用" width="90" align="right">
           <template #default="{ row }">{{ Number(row.cost).toFixed(4) }}</template>
         </el-table-column>
@@ -144,6 +162,10 @@ async function exportCsv() {
   gap: 12px;
   margin-bottom: 16px;
   padding: 16px;
+}
+
+.cache-chip {
+  margin-left: auto;
 }
 
 .table-card {

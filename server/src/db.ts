@@ -33,6 +33,8 @@ export interface KeyRow {
   group_id: number
   group_name: string
   group_multiplier: number
+  group_system_prompt: string
+  group_inject_system: number
   created_at: number
   last_used_at: number | null
   total_prompt_tokens: number
@@ -45,6 +47,8 @@ export interface GroupRow {
   name: string
   multiplier: number
   model_limit: string[]
+  system_prompt: string
+  inject_system: number
   note: string
   created_at: number
 }
@@ -68,17 +72,21 @@ export interface UsageRow {
   status: number
   error: string | null
   request_id: string
+  cached_tokens: number
 }
 
-const CHANNEL_FIELDS = new Set([
-  'name', 'provider', 'base_url', 'api_key', 'models', 'price_in', 'price_out', 'credit',
+const CHANNEL_FIELDS = new Set([  'name', 'provider', 'base_url', 'api_key', 'models', 'price_in', 'price_out', 'credit',
   'billing_endpoint', 'theme_name', 'theme_color', 'icon_svg',
   'inject_system_prompt', 'inject_system_enabled', 'enabled',
 ])
 
 const KEY_FIELDS = new Set(['name', 'status', 'note', 'group_id'])
 
-const GROUP_FIELDS = new Set(['name', 'multiplier', 'model_limit', 'note'])
+const GROUP_FIELDS = new Set(['name', 'multiplier', 'model_limit', 'system_prompt', 'inject_system', 'note'])
+
+// 破甲分组内置的授权安全测试提示词(只协助授权测试/CTF/学习)
+const AUTH_PENTEST_PROMPT =
+  '你是资深安全研究专家,只协助明确授权的安全测试、CTF 竞赛与学习实验。开始前先确认目标与授权范围;拒绝协助任何未授权的入侵、破坏或真实世界的违法活动;涉及漏洞利用时,坚持在隔离的实验环境验证,并给出修复建议。'
 
 interface BalanceCacheRow {
   channel_id: number
@@ -178,6 +186,7 @@ export class Store {
     this.ensureColumn('usage', 'group_id', 'INTEGER')
     this.ensureColumn('usage', 'group_name', "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn('usage', 'rate', 'REAL NOT NULL DEFAULT 1')
+    this.ensureColumn('usage', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0')
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS groups (
@@ -185,15 +194,34 @@ export class Store {
         name TEXT NOT NULL UNIQUE,
         multiplier REAL NOT NULL DEFAULT 1,
         model_limit TEXT NOT NULL DEFAULT '[]',
+        system_prompt TEXT NOT NULL DEFAULT '',
+        inject_system INTEGER NOT NULL DEFAULT 0,
         note TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL
       );
     `)
+    this.ensureColumn('groups', 'system_prompt', "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn('groups', 'inject_system', 'INTEGER NOT NULL DEFAULT 0')
     const n = (this.db.prepare('SELECT COUNT(*) AS c FROM groups').get() as { c: number }).c
     if (n === 0) {
       this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('默认', 1, '原价计费', now())
       this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('体验价', 0.5, '半价,适合内部试用', now())
-      this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('破甲', 0, '释放全部性能,不限速', now())
+      this.db
+        .prepare(
+          'INSERT INTO groups (name, multiplier, system_prompt, inject_system, note, created_at) VALUES (?, ?, ?, 1, ?, ?)'
+        )
+        .run(
+          '破甲',
+          0,
+          AUTH_PENTEST_PROMPT,
+          '免费计费 + 自动注入授权安全测试提示词',
+          now(),
+        )
+    }
+    // 老库迁移:已存在的破甲组没有提示词时回填(用户清空过的不动)
+    const armor = this.db.prepare("SELECT system_prompt FROM groups WHERE name = '破甲'").get() as { system_prompt: string } | undefined
+    if (armor && !armor.system_prompt) {
+      this.db.prepare("UPDATE groups SET system_prompt = ?, inject_system = 1 WHERE name = '破甲'").run(AUTH_PENTEST_PROMPT)
     }
   }
 
@@ -293,11 +321,13 @@ export class Store {
 
   createGroup(input: Record<string, unknown>): GroupRow | null {
     const res = this.db
-      .prepare('INSERT INTO groups (name, multiplier, model_limit, note, created_at) VALUES (?, ?, ?, ?, ?)')
+      .prepare('INSERT INTO groups (name, multiplier, model_limit, system_prompt, inject_system, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(
         String(input.name ?? '新分组'),
         Number(input.multiplier ?? 1),
         JSON.stringify(Array.isArray(input.model_limit) ? input.model_limit : []),
+        String(input.system_prompt ?? ''),
+        Number(input.inject_system ?? 0),
         String(input.note ?? ''),
         now(),
       )
@@ -322,18 +352,19 @@ export class Store {
     return res.changes > 0
   }
 
-  groupUsage(): { group_name: string; tokens: number; requests: number; cost: number }[] {
+  groupUsage(): { group_name: string; tokens: number; requests: number; cost: number; cache_hit: number }[] {
     return this.db
       .prepare(
-        'SELECT COALESCE(group_name, key_name) AS group_name, COUNT(*) AS requests, SUM(total_tokens) AS tokens, SUM(cost) AS cost FROM usage GROUP BY group_name ORDER BY cost DESC'
+        "SELECT COALESCE(NULLIF(group_name, ''), key_name, '未知') AS group_name, COUNT(*) AS requests, SUM(total_tokens) AS tokens, SUM(cost) AS cost, SUM(cached_tokens) AS cache_hit FROM usage GROUP BY group_name ORDER BY cost DESC"
       )
-      .all() as unknown as { group_name: string; requests: number; tokens: number; cost: number }[]
+      .all() as unknown as { group_name: string; requests: number; tokens: number; cost: number; cache_hit: number }[]
   }
 
   // ---- api keys ----
 
   private keySelect = `
-    SELECT k.*, g.name AS group_name, g.multiplier AS group_multiplier
+    SELECT k.*, g.name AS group_name, g.multiplier AS group_multiplier,
+           g.system_prompt AS group_system_prompt, g.inject_system AS group_inject_system
     FROM api_keys k LEFT JOIN groups g ON g.id = k.group_id
   `
 
@@ -348,7 +379,12 @@ export class Store {
   }
 
   private mapKey(r: Record<string, unknown>): KeyRow {
-    return { ...(r as unknown as KeyRow), group_id: Number(r.group_id ?? 1), group_multiplier: Number(r.group_multiplier ?? 1) }
+    return {
+      ...(r as unknown as KeyRow),
+      group_id: Number(r.group_id ?? 1),
+      group_multiplier: Number(r.group_multiplier ?? 1),
+      group_inject_system: Number(r.group_inject_system ?? 0),
+    }
   }
 
   getKeyById(id: string): KeyRow | null {
@@ -401,6 +437,7 @@ export class Store {
     rate: number
     promptTokens: number
     completionTokens: number
+    cachedTokens: number
     cost: number
     latencyMs: number | null
     status: number
@@ -409,12 +446,12 @@ export class Store {
   }): void {
     this.db
       .prepare(
-        'INSERT INTO usage (ts, channel_id, channel_name, model, key_id, key_name, group_id, group_name, rate, prompt_tokens, completion_tokens, total_tokens, cost, latency_ms, status, error, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO usage (ts, channel_id, channel_name, model, key_id, key_name, group_id, group_name, rate, prompt_tokens, completion_tokens, total_tokens, cached_tokens, cost, latency_ms, status, error, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         now(), u.channelId, u.channelName, u.model, u.keyId, u.keyName, u.groupId, u.groupName, u.rate,
         u.promptTokens, u.completionTokens, u.promptTokens + u.completionTokens,
-        u.cost, u.latencyMs, u.status, u.error, u.requestId,
+        u.cachedTokens, u.cost, u.latencyMs, u.status, u.error, u.requestId,
       )
   }
 
@@ -440,17 +477,17 @@ export class Store {
     return { rows, total, page, size }
   }
 
-  usageTotals(): { tokens: number; requests: number; cost: number } {
+  usageTotals(): { tokens: number; requests: number; cost: number; cache_hit: number } {
     const r = this.db
-      .prepare('SELECT COALESCE(SUM(total_tokens), 0) AS tokens, COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost FROM usage')
-      .get() as { tokens: number; requests: number; cost: number }
+      .prepare('SELECT COALESCE(SUM(total_tokens), 0) AS tokens, COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(cached_tokens), 0) AS cache_hit FROM usage')
+      .get() as { tokens: number; requests: number; cost: number; cache_hit: number }
     return r
   }
 
-  usageSince(ts: number): { tokens: number; requests: number; cost: number } {
+  usageSince(ts: number): { tokens: number; requests: number; cost: number; cache_hit: number } {
     const r = this.db
-      .prepare('SELECT COALESCE(SUM(total_tokens), 0) AS tokens, COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost FROM usage WHERE ts >= ?')
-      .get(ts) as { tokens: number; requests: number; cost: number }
+      .prepare('SELECT COALESCE(SUM(total_tokens), 0) AS tokens, COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(cached_tokens), 0) AS cache_hit FROM usage WHERE ts >= ?')
+      .get(ts) as { tokens: number; requests: number; cost: number; cache_hit: number }
     return r
   }
 

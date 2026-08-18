@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import { PROMPT_PRESETS } from '@/constants/prompts'
 import api from '@/api'
 
 const loading = ref(false)
@@ -28,7 +29,7 @@ const form = ref<any>({})
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', multiplier: 1, model_limit: [], note: '' }
+  form.value = { name: '', multiplier: 1, model_limit: [], inject_system: false, system_prompt: '', note: '' }
   dialogVisible.value = true
 }
 
@@ -38,9 +39,16 @@ function openEdit(g: any) {
     name: g.name,
     multiplier: g.multiplier,
     model_limit: g.model_limit ? [...g.model_limit] : [],
+    inject_system: !!g.inject_system,
+    system_prompt: g.system_prompt || '',
     note: g.note,
   }
   dialogVisible.value = true
+}
+
+function usePromptPreset(id: string) {
+  const p = PROMPT_PRESETS.find((x) => x.id === id)
+  if (p) form.value.system_prompt = p.system
 }
 
 async function save() {
@@ -52,6 +60,8 @@ async function save() {
     name: form.value.name.trim(),
     multiplier: Number(form.value.multiplier),
     model_limit: form.value.model_limit,
+    inject_system: form.value.inject_system ? 1 : 0,
+    system_prompt: form.value.system_prompt,
     note: form.value.note,
   }
   if (editingId.value) {
@@ -98,9 +108,12 @@ function multLabel(m: number): string {
         <div class="card group-card">
           <div class="head">
             <span class="name">{{ g.name }}</span>
-            <el-tag :type="g.multiplier === 0 ? 'danger' : g.multiplier < 1 ? 'success' : 'info'" effect="dark">
-              {{ multLabel(g.multiplier) }}
-            </el-tag>
+            <div class="head-tags">
+              <el-tag v-if="g.inject_system" size="small" type="danger" effect="dark" class="mr8">提示词注入</el-tag>
+              <el-tag :type="g.multiplier === 0 ? 'danger' : g.multiplier < 1 ? 'success' : 'info'" effect="dark">
+                {{ multLabel(g.multiplier) }}
+              </el-tag>
+            </div>
           </div>
           <div class="mult">
             <span class="label">计费倍率</span>
@@ -154,6 +167,18 @@ function multLabel(m: number): string {
             <el-option v-for="m in form.model_limit" :key="m" :label="m" :value="m" />
           </el-select>
         </el-form-item>
+        <el-form-item label="系统提示词">
+          <div class="prompt-wrap">
+            <div class="prompt-row">
+              <el-select v-model="form.presetId" placeholder="内置提示词(可选)" style="width: 180px" @change="usePromptPreset">
+                <el-option v-for="p in PROMPT_PRESETS" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
+              <el-switch v-model="form.inject_system" />
+              <span class="muted">{{ form.inject_system ? '开启:请求缺 system 消息时自动注入(优先于渠道提示词)' : '关闭(请求原样透传)' }}</span>
+            </div>
+            <el-input v-model="form.system_prompt" type="textarea" :rows="3" placeholder="注入的系统提示词,可编辑;留空则关闭" />
+          </div>
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.note" placeholder="可选" />
         </el-form-item>
@@ -189,6 +214,15 @@ function multLabel(m: number): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.head-tags {
+  display: flex;
+  align-items: center;
+}
+
+.mr8 {
+  margin-right: 8px;
 }
 
 .name {
@@ -243,5 +277,19 @@ function multLabel(m: number): string {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.prompt-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 </style>

@@ -49,18 +49,36 @@ function pickChannel(store: Store, cfg: EnvConfig, model?: string): { channel: C
   return { channel, upstreamModel: mapped || channel.models[0] || local }
 }
 
-// 组装发往上游的 body。默认原样透传(100% 纯度);只有渠道显式开启注入且请求未带 system 消息时才补一条
-function buildUpstreamBody(channel: ChannelRow, body: Record<string, unknown>): Record<string, unknown> {
+// 组装发往上游的 body。默认原样透传(100% 纯度);仅当请求未带 system 消息时,
+// 按「分组注入 > 渠道注入」的优先级补一条系统提示词
+function buildUpstreamBody(
+  channel: ChannelRow,
+  body: Record<string, unknown>,
+  group?: { inject: boolean; prompt: string },
+): Record<string, unknown> {
   const out: Record<string, unknown> = { ...body }
-  if (
-    channel.inject_system_enabled === 1 &&
-    channel.inject_system_prompt.trim() &&
-    Array.isArray(body.messages) &&
-    !(body.messages as { role?: string }[]).some((m) => m?.role === 'system')
-  ) {
-    out.messages = [{ role: 'system', content: channel.inject_system_prompt }, ...(body.messages as unknown[])]
+  const msgs = Array.isArray(body.messages) ? (body.messages as { role?: string }[]) : null
+  if (msgs && !msgs.some((m) => m?.role === 'system')) {
+    const prompt =
+      group && group.inject && group.prompt.trim()
+        ? group.prompt
+        : channel.inject_system_enabled === 1 && channel.inject_system_prompt.trim()
+          ? channel.inject_system_prompt
+          : ''
+    if (prompt) {
+      out.messages = [{ role: 'system', content: prompt }, ...(msgs as unknown[])]
+    }
   }
   return out
+}
+
+// 从上游返回的 usage 里提取缓存命中 token,兼容各家字段
+function extractCached(usage: Record<string, unknown> | null): number {
+  if (!usage) return 0
+  const d = usage.prompt_tokens_details as Record<string, unknown> | undefined
+  const v = d?.cached_tokens ?? usage.prompt_cache_hit_tokens ?? usage.cache_read_input_tokens
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : 0
 }
 
 async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: Store): Promise<void> {
@@ -71,7 +89,13 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const picked = pickChannel(store, cfg, model)
   if (!picked) return openaiError(res, 400, 'no_channel', 'no enabled channel available')
 
-  const upstreamBody = { ...buildUpstreamBody(picked.channel, body), model: picked.upstreamModel }
+  const upstreamBody = {
+    ...buildUpstreamBody(picked.channel, body, {
+      inject: key.group_inject_system === 1,
+      prompt: key.group_system_prompt ?? '',
+    }),
+    model: picked.upstreamModel,
+  }
   const url = picked.channel.base_url.replace(/\/+$/, '') + '/' + path
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), body.stream ? STREAM_TIMEOUT_MS : RELAY_TIMEOUT_MS)
@@ -115,20 +139,20 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   const usage = data && typeof data.usage === 'object' ? (data.usage as Record<string, unknown>) : null
   const pt = usage && Number.isFinite(Number(usage.prompt_tokens)) ? Number(usage.prompt_tokens) : estimateTokens(jsonStr(upstreamBody))
   const ct = usage && Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : estimateTokens(payload)
-  recordOk(store, key, picked.channel, model ?? '', started, pt, ct, uuid(), null)
+  recordOk(store, key, picked.channel, model ?? '', started, pt, ct, extractCached(usage), uuid(), null)
   res.set('content-type', 'application/json').status(upstream.status).send(payload)
 }
 
 function recordOk(
   store: Store, key: KeyRow, channel: ChannelRow, model: string, started: number,
-  pt: number, ct: number, requestId: string, latencyMs: number | null,
+  pt: number, ct: number, cachedTokens: number, requestId: string, latencyMs: number | null,
 ): void {
   const rate = key.group_multiplier || 1
   const cost = costFor(channel, pt, ct) * rate
   store.addUsage({
     channelId: channel.id, channelName: channel.name, model, keyId: key.id, keyName: key.name,
     groupId: key.group_id, groupName: key.group_name, rate,
-    promptTokens: pt, completionTokens: ct, cost, latencyMs: latencyMs ?? now() - started, status: 0, error: null, requestId,
+    promptTokens: pt, completionTokens: ct, cachedTokens, cost, latencyMs: latencyMs ?? now() - started, status: 0, error: null, requestId,
   })
   store.bumpKey(key.id, pt, ct)
 }
@@ -138,7 +162,7 @@ function recordError(store: Store, key: KeyRow, channel: ChannelRow, model: stri
   store.addUsage({
     channelId: channel.id, channelName: channel.name, model, keyId: key.id, keyName: key.name,
     groupId: key.group_id, groupName: key.group_name, rate,
-    promptTokens: 0, completionTokens: 0, cost: 0, latencyMs: now() - started, status: 1, error, requestId,
+    promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, latencyMs: now() - started, status: 1, error, requestId,
   })
   store.bumpKey(key.id, 0, 0)
 }
@@ -162,7 +186,7 @@ async function handleStream(
   })
   res.flushHeaders()
 
-  let usage: { prompt_tokens: number; completion_tokens: number } | null = null
+  let usage: { prompt_tokens: number; completion_tokens: number; cached_tokens: number } | null = null
   let outChars = 0
   const promptEst = estimateTokens(jsonStr(upstreamBody))
 
@@ -182,11 +206,12 @@ async function handleStream(
 
   const pt = usage?.prompt_tokens ?? promptEst
   const ct = usage?.completion_tokens ?? estimateTokens(String(outChars))
-  recordOk(store, key, channel, model, started, pt, ct, requestId, now() - started)
+  const cached = usage?.cached_tokens ?? 0
+  recordOk(store, key, channel, model, started, pt, ct, cached, requestId, now() - started)
   res.end()
 }
 
-function extractUsage(text: string): { prompt_tokens: number; completion_tokens: number } | null {
+function extractUsage(text: string): { prompt_tokens: number; completion_tokens: number; cached_tokens: number } | null {
   const idx = text.indexOf('"usage"')
   if (idx === -1) return null
   try {
@@ -197,7 +222,11 @@ function extractUsage(text: string): { prompt_tokens: number; completion_tokens:
       const obj = JSON.parse(json)
       const u = obj?.usage
       if (u && Number.isFinite(Number(u.prompt_tokens))) {
-        return { prompt_tokens: Number(u.prompt_tokens), completion_tokens: Number(u.completion_tokens ?? 0) }
+        return {
+          prompt_tokens: Number(u.prompt_tokens),
+          completion_tokens: Number(u.completion_tokens ?? 0),
+          cached_tokens: extractCached(u),
+        }
       }
     }
   } catch {

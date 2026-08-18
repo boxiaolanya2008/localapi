@@ -141,7 +141,7 @@ const barOption = computed<any>(() => {
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="mt16">
+    <el-row :gutter="16" class="mt16 eq-cards">
       <el-col :span="12" :xs="24">
         <div class="card chart-card">
           <div class="card-title">模型用量 TOP</div>
@@ -154,7 +154,7 @@ const barOption = computed<any>(() => {
           <div v-if="!stats?.byGroup?.length" class="muted">暂无数据</div>
           <div v-for="g in stats?.byGroup" :key="g.group_name" class="chan-row">
             <span class="dot" style="background: #f59e0b"></span>
-            <span class="chan-name">{{ g.group_name }}</span>
+            <span class="chan-name">{{ g.group_name || '未知' }}</span>
             <span class="muted">{{ g.requests }} 次</span>
             <span class="chan-balance mono">{{ fmt(g.cost) }}</span>
           </div>
@@ -185,6 +185,17 @@ const barOption = computed<any>(() => {
 
 .mt16 {
   margin-top: 16px;
+}
+
+// 三张卡片等高:行内 col 拉伸,卡片占满
+.eq-cards {
+  .el-col {
+    display: flex;
+  }
+
+  .card {
+    width: 100%;
+  }
 }
 
 .card-title {

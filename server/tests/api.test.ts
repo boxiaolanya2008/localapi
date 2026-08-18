@@ -25,7 +25,7 @@ function startMockUpstream(): Promise<{ port: number; close: () => void }> {
         if (b.stream) {
           res.writeHead(200, { 'content-type': 'text/event-stream' })
           res.write(
-            'data: {"id":"m1","choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":11,"completion_tokens":4,"total_tokens":15}}\n\n',
+            'data: {"id":"m1","choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":11,"completion_tokens":4,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":6}}}\n\n',
           )
           res.end('data: [DONE]\n\n')
         } else {
@@ -34,7 +34,13 @@ function startMockUpstream(): Promise<{ port: number; close: () => void }> {
             JSON.stringify({
               id: 'm1',
               choices: [{ message: { role: 'assistant', content: 'hi' } }],
-              usage: { prompt_tokens: 11, completion_tokens: 4, total_tokens: 15 },
+              usage: {
+                prompt_tokens: 11,
+                completion_tokens: 4,
+                total_tokens: 15,
+                prompt_tokens_details: { cached_tokens: 6 },
+              },
+              echo_messages: b.messages ?? null,
             }),
           )
         }
@@ -145,10 +151,11 @@ test('create key, relay chat, usage recorded, stats and live balance', async () 
 
   const usage = await req('/admin/usage', { token: 'test-admin-token' })
   assert.equal((usage.data as { total: number }).total, 1)
-  const row = (usage.data as { rows: { total_tokens: number; channel_name: string; status: number }[] }).rows[0]
+  const row = (usage.data as { rows: { total_tokens: number; channel_name: string; status: number; cached_tokens: number }[] }).rows[0]
   assert.equal(row.total_tokens, 15)
   assert.equal(row.channel_name, 'mock')
   assert.equal(row.status, 0)
+  assert.equal(row.cached_tokens, 6)
 
   const stats = await req('/admin/stats', { token: 'test-admin-token' })
   const s = stats.data as { today: { tokens: number; requests: number }; channels: { id: number; balance: { source: string; amount: number } }[] }
@@ -178,9 +185,28 @@ test('stream passthrough records usage from usage chunk', async () => {
   assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/)
 
   const usage = await req('/admin/usage', { token: 'test-admin-token' })
-  const rows = (usage.data as { rows: { total_tokens: number; stream?: never }[] }).rows
+  const rows = (usage.data as { rows: { total_tokens: number; cached_tokens: number }[] }).rows
   assert.ok(rows.length >= 2)
   assert.equal(rows[0].total_tokens, 15)
+  assert.equal(rows[0].cached_tokens, 6)
+})
+
+test('group system prompt is injected when enabled', async () => {
+  const g = await req('/admin/groups', {
+    token: 'test-admin-token',
+    method: 'POST',
+    body: { name: '注入组', multiplier: 1, inject_system: 1, system_prompt: '你是授权安全测试助手。' },
+  })
+  const gid = (g.data as { id: number }).id
+
+  const created = await req('/admin/keys', { token: 'test-admin-token', body: { name: 'inject-key', groupId: gid } })
+  const key = (created.data as { key: string }).key
+
+  const chat = await req('/v1/chat/completions', { key, body: { model: 'demo-model', messages: [{ role: 'user', content: 'hi' }] } })
+  const echo = (chat.data as { echo_messages: { role: string; content: string }[] | null }).echo_messages
+  assert.ok(Array.isArray(echo) && echo.length === 2, `echo=${JSON.stringify(echo)}`)
+  assert.equal(echo[0].role, 'system')
+  assert.equal(echo[0].content, '你是授权安全测试助手。')
 })
 
 test('relay rejects bad key with 401', async () => {

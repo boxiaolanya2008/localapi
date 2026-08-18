@@ -9,7 +9,7 @@ async function main() {
   const created = await fetch(base + '/admin/groups', {
     headers: H,
     method: 'POST',
-    body: JSON.stringify({ name: '破甲实验', multiplier: 0.3 }),
+    body: JSON.stringify({ name: '破甲实验' + Date.now(), multiplier: 0.3 }),
   }).then((r) => r.json())
   console.log('created group id:', created.id)
 

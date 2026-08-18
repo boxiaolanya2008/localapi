@@ -8,6 +8,7 @@ import { PROVIDERS } from '@/constants/providers'
 import { MODEL_CATALOG } from '@/constants/catalog'
 import { PROMPT_PRESETS } from '@/constants/prompts'
 import { per1MTo1k, fmtUsd } from '@/utils/format'
+import { API_STYLES, STYLE_DEFAULT_PATH } from '@/constants/apiStyles'
 import api from '@/api'
 
 const loading = ref(false)
@@ -77,6 +78,8 @@ function openCreate() {
     provider: 'openai',
     base_url: PROVIDER_BASE_URLS.openai,
     api_key: '',
+    api_style: 'chat',
+    api_path: STYLE_DEFAULT_PATH.chat,
     models: [],
     price_in: 0,
     price_out: 0,
@@ -97,6 +100,8 @@ function openEdit(ch: any) {
     provider: ch.provider || 'openai',
     base_url: ch.base_url,
     api_key: '',
+    api_style: ch.api_style || 'chat',
+    api_path: ch.api_path || STYLE_DEFAULT_PATH[ch.api_style || 'chat'] || '',
     models: [...ch.models],
     price_in: ch.price_in,
     price_out: ch.price_out,
@@ -113,6 +118,13 @@ function openEdit(ch: any) {
     inject_system_prompt: ch.inject_system_prompt || '',
   }
   dialogVisible.value = true
+}
+
+function onStyleChange(style: string) {
+  // 只在用户还没改过路径时,自动带出该协议的默认路由
+  if (!form.value.api_path || form.value.api_path === STYLE_DEFAULT_PATH.chat) {
+    form.value.api_path = STYLE_DEFAULT_PATH[style] || ''
+  }
 }
 
 function onProviderPick(p: string) {
@@ -156,6 +168,8 @@ async function save() {
     name: f.name.trim(),
     provider: f.provider,
     base_url: f.base_url.trim(),
+    api_style: f.api_style || 'chat',
+    api_path: (f.api_path || '').trim(),
     models: f.models,
     price_in: Number(f.price_in),
     price_out: Number(f.price_out),
@@ -210,6 +224,16 @@ async function save() {
         </el-form-item>
         <el-form-item label="接口地址">
           <el-input v-model="form.base_url" placeholder="https://api.example.com/v1" />
+        </el-form-item>
+        <el-form-item label="API 协议">
+          <el-select v-model="form.api_style" style="width: 100%" @change="onStyleChange">
+            <el-option v-for="s in API_STYLES" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+          <div class="muted mt4">{{ API_STYLES.find((s) => s.value === form.api_style)?.desc }}</div>
+        </el-form-item>
+        <el-form-item label="路由路径">
+          <el-input v-model="form.api_path" :placeholder="STYLE_DEFAULT_PATH[form.api_style] || '自定义路径,相对接口地址'" />
+          <div class="muted mt4">最终请求: {接口地址}/{路由路径}.Responses/Claude 协议会由中转自动转换</div>
         </el-form-item>
         <el-form-item label="API Key">
           <el-input v-model="form.api_key" :placeholder="editingId ? '留空保持不变' : '粘贴你在这个供应商申请的密钥'" show-password />

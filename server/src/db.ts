@@ -9,6 +9,8 @@ export interface ChannelRow {
   provider: string
   base_url: string
   api_key: string
+  api_style: string
+  api_path: string
   models: string[]
   price_in: number
   price_out: number
@@ -89,7 +91,7 @@ export interface UsageRow {
   cached_tokens: number
 }
 
-const CHANNEL_FIELDS = new Set([  'name', 'provider', 'base_url', 'api_key', 'models', 'price_in', 'price_out', 'credit',
+const CHANNEL_FIELDS = new Set([  'name', 'provider', 'base_url', 'api_key', 'api_style', 'api_path', 'models', 'price_in', 'price_out', 'credit',
   'billing_endpoint', 'theme_name', 'theme_color', 'icon_svg',
   'inject_system_prompt', 'inject_system_enabled', 'enabled',
 ])
@@ -197,6 +199,8 @@ export class Store {
 
     this.ensureColumn('api_keys', 'group_id', 'INTEGER NOT NULL DEFAULT 1')
     this.ensureColumn('channels', 'provider', "TEXT NOT NULL DEFAULT ''")
+    this.ensureColumn('channels', 'api_style', "TEXT NOT NULL DEFAULT 'chat'")
+    this.ensureColumn('channels', 'api_path', "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn('channels', 'inject_system_prompt', "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn('channels', 'inject_system_enabled', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('usage', 'group_id', 'INTEGER')
@@ -324,7 +328,7 @@ export class Store {
     const models = Array.isArray(input.models) ? JSON.stringify(input.models) : JSON.stringify([])
     const res = this.db
       .prepare(
-        'INSERT INTO channels (name, base_url, api_key, models, price_in, price_out, credit, billing_endpoint, provider, theme_name, theme_color, icon_svg, inject_system_prompt, inject_system_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO channels (name, base_url, api_key, models, price_in, price_out, credit, billing_endpoint, provider, api_style, api_path, theme_name, theme_color, icon_svg, inject_system_prompt, inject_system_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       .run(
         String(input.name ?? 'channel'),
@@ -336,6 +340,8 @@ export class Store {
         Number(input.credit ?? 0),
         String(input.billing_endpoint ?? ''),
         String(input.provider ?? ''),
+        String(input.api_style ?? 'chat'),
+        String(input.api_path ?? ''),
         String(input.theme_name ?? '默认'),
         String(input.theme_color ?? '#10b981'),
         String(input.icon_svg ?? ''),

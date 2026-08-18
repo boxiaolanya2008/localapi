@@ -4,6 +4,7 @@ import type { Store, ChannelRow, KeyRow } from './db.js'
 import type { EnvConfig } from './config.js'
 import { hashKey, uuid, estimateTokens, openaiError, now, jsonStr } from './util.js'
 import { costFor } from './billing.js'
+import { styleOf, needsConversion, convertOutbound, convertInbound, openAIToSSE, resolveEndpoint, authHeaders } from './protocol.js'
 
 const RELAY_TIMEOUT_MS = 120_000
 const STREAM_TIMEOUT_MS = 5 * 60_000
@@ -127,18 +128,61 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
   }
 
   const upstreamBody = { ...upstreamRaw, model: picked.upstreamModel }
-  const url = picked.channel.base_url.replace(/\/+$/, '') + '/' + path
+
+  const style = styleOf(picked.channel)
+  const url = resolveEndpoint(picked.channel)
+  const headers = authHeaders(picked.channel)
+  const wantsStream = !!body.stream
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), body.stream ? STREAM_TIMEOUT_MS : RELAY_TIMEOUT_MS)
 
+  // Responses / Claude:做协议转换。上游一律非流式调用,再转回 OpenAI 结构;
+  // 客户端要流式就给合成 SSE,保证能流式显示
+  if (needsConversion(style)) {
+    const converted = { ...convertOutbound(style, upstreamBody), stream: false }
+    let conv: globalThis.Response
+    try {
+      conv = await fetch(url, { method: 'POST', headers, body: jsonStr(converted), signal: ctrl.signal })
+    } catch (err) {
+      clearTimeout(timer)
+      const msg = (err as Error).name === 'AbortError' ? 'upstream timeout' : String((err as Error).message ?? err)
+      recordError(store, key, picked.channel, model ?? '', started, msg, uuid())
+      return openaiError(res, 502, 'upstream_error', msg)
+    }
+    clearTimeout(timer)
+    const rawText = await conv.text()
+    if (!conv.ok) {
+      recordError(store, key, picked.channel, model ?? '', started, rawText.slice(0, 500), uuid())
+      res.status(conv.status).set('content-type', 'application/json').send(rawText)
+      return
+    }
+    let completion: Record<string, unknown>
+    try {
+      completion = convertInbound(style, rawText)
+    } catch (err) {
+      recordError(store, key, picked.channel, model ?? '', started, String((err as Error).message ?? err), uuid())
+      return openaiError(res, 502, 'upstream_parse_error', String((err as Error).message ?? err))
+    }
+    const usageObj = (completion.usage ?? {}) as Record<string, unknown>
+    const pt = Number(usageObj.prompt_tokens ?? 0) || estimateTokens(jsonStr(upstreamBody))
+    const ct = Number(usageObj.completion_tokens ?? 0) || estimateTokens(rawText)
+    recordOk(store, key, picked.channel, model ?? '', started, pt, ct, extractCached(usageObj), uuid(), null)
+    if (wantsStream) {
+      res.set('content-type', 'text/event-stream').set('cache-control', 'no-cache')
+      res.write(openAIToSSE(completion))
+      res.end()
+    } else {
+      res.set('content-type', 'application/json').status(200).send(jsonStr(completion))
+    }
+    return
+  }
+
+  // chat / custom:原样转发,真流式透传
   let upstream: globalThis.Response
   try {
     upstream = await fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${picked.channel.api_key}`,
-      },
+      headers,
       body: jsonStr(upstreamBody),
       signal: ctrl.signal,
     })

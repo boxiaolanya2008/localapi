@@ -294,6 +294,8 @@ function publicChannel(c: ChannelRow): Record<string, unknown> {
     provider: c.provider,
     base_url: c.base_url,
     api_key_masked: maskKey(c.api_key),
+    api_style: c.api_style || 'chat',
+    api_path: c.api_path || '',
     models: c.models,
     price_in: c.price_in,
     price_out: c.price_out,

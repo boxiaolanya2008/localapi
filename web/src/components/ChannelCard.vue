@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Icon } from '@iconify/vue'
 import { PROVIDERS } from '@/constants/providers'
+import { API_STYLES } from '@/constants/apiStyles'
 import api from '@/api'
 
 const props = defineProps<{ channel: any }>()
@@ -60,6 +61,7 @@ async function remove() {
         </div>
         <div class="tags">
           <el-tag v-for="m in channel.models.slice(0, 4)" :key="m" size="small" type="info" effect="plain" class="tag">{{ m }}</el-tag>
+          <el-tag size="small" type="warning" effect="plain" class="tag">{{ API_STYLES.find((s) => s.value === (channel.api_style || 'chat'))?.label || 'Chat' }}</el-tag>
         </div>
       </div>
       <el-switch :model-value="channel.enabled === 1" @change="toggle" />

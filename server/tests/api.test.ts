@@ -288,6 +288,59 @@ test('default group protects default keys when deleting group', async () => {
   assert.equal(r.status, 400)
 })
 
+test('anthropic(claude) channel is translated to OpenAI-compatible response', async (t) => {
+  // 起一个 Anthropic Messages 形态的假上游
+  const claude = http.createServer((q, s) => {
+    if ((q.url ?? '').includes('/v1/messages')) {
+      let body = ''
+      q.on('data', (c) => (body += c))
+      q.on('end', () => {
+        const b = JSON.parse(body)
+        s.writeHead(200, { 'content-type': 'application/json' })
+        s.end(
+          JSON.stringify({
+            id: 'msg-claude',
+            model: b.model,
+            content: [{ type: 'text', text: '来自 Claude 的回复' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 8, output_tokens: 5, total_tokens: 13, cache_read_input_tokens: 3 },
+          }),
+        )
+      })
+      return
+    }
+    s.writeHead(404); s.end('{}')
+  })
+  await new Promise<void>((r) => claude.listen(0, '127.0.0.1', r))
+  t.after(() => claude.close())
+  const claudePort = (claude.address() as { port: number }).port
+
+  const ch = await req('/admin/channels', {
+    token: 'test-admin-token',
+    body: {
+      name: 'claude-up', base_url: `http://127.0.0.1:${claudePort}`, api_key: 'sk-claude',
+      api_style: 'claude', api_path: 'v1/messages', models: ['claude-sonnet'], price_in: 0.001, price_out: 0.002,
+    },
+  })
+  const chid = (ch.data as { id: number }).id
+
+  const created = await req('/admin/keys', { token: 'test-admin-token', body: { name: 'claude-key', groupId: 1 } })
+  const key = (created.data as { key: string }).key
+
+  const chat = await req('/v1/chat/completions', { key, body: { model: 'claude-sonnet', messages: [{ role: 'user', content: 'hello' }] } })
+  assert.equal(chat.status, 200)
+  const d = chat.data as { choices: { message: { content: string } }[] }
+  assert.equal(d.choices[0].message.content, '来自 Claude 的回复')
+
+  const usage = await req('/admin/usage', { token: 'test-admin-token' })
+  const row = (usage.data as { rows: { key_name: string; cached_tokens: number; prompt_tokens: number }[] }).rows[0]
+  assert.equal(row.key_name, 'claude-key')
+  assert.equal(row.cached_tokens, 3)
+  assert.equal(row.prompt_tokens, 8)
+
+  await req(`/admin/channels/${chid}`, { token: 'test-admin-token', method: 'DELETE' })
+})
+
 test('channel test endpoint pings mock upstream', async () => {
   const r = await req('/admin/channels', { token: 'test-admin-token' })
   const id = (r.data as { id: number }[])[0].id

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6 - 2026-08-18
+
+- 渠道新增「API 协议」与「路由路径」:支持 OpenAI Chat / OpenAI Responses / Anthropic Messages / 自定义路由
+- Responses 与 Claude 协议由中转自动双向转换(系统消息/文本/工具调用/抽样参数/用量与缓存字段),客户端仍按 OpenAI Chat 格式调用
+- 转换协议时上游走非流式,客户端要流式则合成为 OpenAI SSE
+- 测试 17/17(含协议转换单测与 Claude 链路集成测试)
+
 ## 0.2.5 - 2026-08-18
 
 - 破甲分组改正常倍率(1):倍率 0=免费 易误读,统一为正常计费

@@ -35,6 +35,7 @@ export interface KeyRow {
   group_multiplier: number
   group_system_prompt: string
   group_inject_system: number
+  group_force_obey: number
   created_at: number
   last_used_at: number | null
   total_prompt_tokens: number
@@ -49,6 +50,7 @@ export interface GroupRow {
   model_limit: string[]
   system_prompt: string
   inject_system: number
+  force_obey: number
   note: string
   created_at: number
 }
@@ -82,7 +84,7 @@ const CHANNEL_FIELDS = new Set([  'name', 'provider', 'base_url', 'api_key', 'mo
 
 const KEY_FIELDS = new Set(['name', 'status', 'note', 'group_id'])
 
-const GROUP_FIELDS = new Set(['name', 'multiplier', 'model_limit', 'system_prompt', 'inject_system', 'note'])
+const GROUP_FIELDS = new Set(['name', 'multiplier', 'model_limit', 'system_prompt', 'inject_system', 'force_obey', 'note'])
 
 // 破甲分组内置的授权安全测试提示词(只协助授权测试/CTF/学习)
 const AUTH_PENTEST_PROMPT =
@@ -196,12 +198,14 @@ export class Store {
         model_limit TEXT NOT NULL DEFAULT '[]',
         system_prompt TEXT NOT NULL DEFAULT '',
         inject_system INTEGER NOT NULL DEFAULT 0,
+        force_obey INTEGER NOT NULL DEFAULT 0,
         note TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL
       );
     `)
     this.ensureColumn('groups', 'system_prompt', "TEXT NOT NULL DEFAULT ''")
     this.ensureColumn('groups', 'inject_system', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('groups', 'force_obey', 'INTEGER NOT NULL DEFAULT 0')
     const n = (this.db.prepare('SELECT COUNT(*) AS c FROM groups').get() as { c: number }).c
     if (n === 0) {
       this.db.prepare('INSERT INTO groups (name, multiplier, note, created_at) VALUES (?, ?, ?, ?)').run('默认', 1, '原价计费', now())
@@ -321,13 +325,14 @@ export class Store {
 
   createGroup(input: Record<string, unknown>): GroupRow | null {
     const res = this.db
-      .prepare('INSERT INTO groups (name, multiplier, model_limit, system_prompt, inject_system, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .prepare('INSERT INTO groups (name, multiplier, model_limit, system_prompt, inject_system, force_obey, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(
         String(input.name ?? '新分组'),
         Number(input.multiplier ?? 1),
         JSON.stringify(Array.isArray(input.model_limit) ? input.model_limit : []),
         String(input.system_prompt ?? ''),
         Number(input.inject_system ?? 0),
+        Number(input.force_obey ?? 0),
         String(input.note ?? ''),
         now(),
       )
@@ -364,7 +369,8 @@ export class Store {
 
   private keySelect = `
     SELECT k.*, g.name AS group_name, g.multiplier AS group_multiplier,
-           g.system_prompt AS group_system_prompt, g.inject_system AS group_inject_system
+           g.system_prompt AS group_system_prompt, g.inject_system AS group_inject_system,
+           g.force_obey AS group_force_obey
     FROM api_keys k LEFT JOIN groups g ON g.id = k.group_id
   `
 
@@ -384,6 +390,7 @@ export class Store {
       group_id: Number(r.group_id ?? 1),
       group_multiplier: Number(r.group_multiplier ?? 1),
       group_inject_system: Number(r.group_inject_system ?? 0),
+      group_force_obey: Number(r.group_force_obey ?? 0),
     }
   }
 

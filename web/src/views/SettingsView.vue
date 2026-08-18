@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Icon } from '@iconify/vue'
+import { PROMPT_PRESETS } from '@/constants/prompts'
 import api from '@/api'
 
 const loading = ref(true)
@@ -9,19 +10,49 @@ const info = ref<any>(null)
 const priceIn = ref('')
 const priceOut = ref('')
 
+const groups = ref<any[]>([])
+const armorForm = ref({ prompt: '', enabled: true, force: true })
+const armorGroup = computed(
+  () => groups.value.find((g) => g.inject_system === 1) ?? groups.value.find((g) => g.name === '破甲') ?? null,
+)
+
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/admin/settings')
-    info.value = data
-    priceIn.value = data.defaults.priceIn
-    priceOut.value = data.defaults.priceOut
+    const [s, g] = await Promise.all([api.get('/admin/settings'), api.get('/admin/groups')])
+    info.value = s.data
+    priceIn.value = s.data.defaults.priceIn
+    priceOut.value = s.data.defaults.priceOut
+    groups.value = g.data
+    const ag = g.data.find((x: any) => x.inject_system === 1) ?? g.data.find((x: any) => x.name === '破甲')
+    if (ag) {
+      armorForm.value = { prompt: ag.system_prompt || '', enabled: !!ag.inject_system, force: !!ag.force_obey }
+    }
   } finally {
     loading.value = false
   }
 }
 
 onMounted(load)
+
+function useArmorPreset(id: string) {
+  const p = PROMPT_PRESETS.find((x) => x.id === id)
+  if (p) armorForm.value.prompt = p.system
+}
+
+async function saveArmor() {
+  const g = armorGroup.value
+  if (!g) {
+    ElMessage.warning('没有可配置的注入分组,请先在分组管理创建一个并开启提示词注入')
+    return
+  }
+  await api.patch(`/admin/groups/${g.id}`, {
+    system_prompt: armorForm.value.prompt,
+    inject_system: armorForm.value.enabled ? 1 : 0,
+    force_obey: armorForm.value.force ? 1 : 0,
+  })
+  ElMessage.success(`已保存到分组「${g.name}」,该分组密钥的请求立即生效`)
+}
 
 async function saveDefaults() {
   await api.patch('/admin/settings', { price_in: Number(priceIn.value), price_out: Number(priceOut.value) })
@@ -30,6 +61,7 @@ async function saveDefaults() {
 
 const env = () => info.value?.env ?? {}
 const modelMapEntries = computed(() => Object.entries(info.value?.env?.modelMap ?? {}))
+const armorPresetId = ref('')
 </script>
 
 <template>
@@ -52,6 +84,23 @@ const modelMapEntries = computed(() => Object.entries(info.value?.env?.modelMap 
                 <span v-else class="muted">无,原样转发</span>
               </span>
             </div>
+          </div>
+        </div>
+
+        <div class="card mt16">
+          <div class="card-title"><el-icon class="mr8"><Icon icon="mdi:shield-alert-outline" /></el-icon>破解提示词(破甲组)</div>
+          <p class="muted">只保留一个提示词注入的破解分组。该分组密钥的请求会自动注入下面的 system 提示词(请求自带 system 消息时不注入);开启「强制遵守」会在提示词末尾追加最高优先级指令。</p>
+          <div class="prompt-row">
+            <el-select v-model="armorPresetId" placeholder="内置提示词(可选)" style="width: 180px" @change="useArmorPreset">
+              <el-option v-for="p in PROMPT_PRESETS" :key="p.id" :label="p.name" :value="p.id" />
+            </el-select>
+            <el-switch v-model="armorForm.enabled" active-text="开启注入" />
+            <el-switch v-model="armorForm.force" active-text="强制遵守" />
+          </div>
+          <el-input v-model="armorForm.prompt" type="textarea" :rows="5" class="mt16" placeholder="自定义破解提示词,模型必须遵守" />
+          <div class="mt16">
+            <el-button type="primary" @click="saveArmor">保存破解提示词</el-button>
+            <span v-if="armorGroup" class="muted ml">生效分组:{{ armorGroup.name }} ×{{ armorGroup.multiplier }}</span>
           </div>
         </div>
 
@@ -163,5 +212,16 @@ const modelMapEntries = computed(() => Object.entries(info.value?.env?.modelMap 
 
 .mt16 {
   margin-top: 16px;
+}
+
+.prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ml {
+  margin-left: 10px;
 }
 </style>

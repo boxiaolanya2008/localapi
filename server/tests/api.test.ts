@@ -195,7 +195,7 @@ test('group system prompt is injected when enabled', async () => {
   const g = await req('/admin/groups', {
     token: 'test-admin-token',
     method: 'POST',
-    body: { name: '注入组', multiplier: 1, inject_system: 1, system_prompt: '你是授权安全测试助手。' },
+    body: { name: '注入组', multiplier: 1, inject_system: 1, force_obey: 1, system_prompt: '你是授权安全测试助手。' },
   })
   const gid = (g.data as { id: number }).id
 
@@ -206,7 +206,8 @@ test('group system prompt is injected when enabled', async () => {
   const echo = (chat.data as { echo_messages: { role: string; content: string }[] | null }).echo_messages
   assert.ok(Array.isArray(echo) && echo.length === 2, `echo=${JSON.stringify(echo)}`)
   assert.equal(echo[0].role, 'system')
-  assert.equal(echo[0].content, '你是授权安全测试助手。')
+  assert.ok(echo[0].content.startsWith('你是授权安全测试助手。'), echo[0].content)
+  assert.ok(echo[0].content.includes('最高优先级'), echo[0].content)
 })
 
 test('relay rejects bad key with 401', async () => {

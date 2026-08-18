@@ -91,8 +91,22 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
     res.json(data)
   })
 
-  r.get('/usage/export', (req, res) => {
+  // 按时间范围与筛选汇总用量(今日/近N天/自定义xxx-xxx)
+  r.get('/usage/summary', (req, res) => {
     const q = req.query
+    const channelId = q.channelId !== undefined ? Number(q.channelId) : undefined
+    const groupId = q.groupId !== undefined ? Number(q.groupId) : undefined
+    const agg = store.usageAgg({
+      from: q.from ? Number(q.from) : undefined,
+      to: q.to ? Number(q.to) : undefined,
+      keyId: typeof q.keyId === 'string' ? q.keyId : undefined,
+      channelId: Number.isFinite(channelId) ? channelId : undefined,
+      groupId: Number.isFinite(groupId) ? groupId : undefined,
+    })
+    res.json(agg)
+  })
+
+  r.get('/usage/export', (req, res) => {    const q = req.query
     const { rows } = store.queryUsage({
       from: q.from ? Number(q.from) : undefined,
       to: q.to ? Number(q.to) : undefined,

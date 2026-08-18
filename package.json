@@ -8,6 +8,7 @@
     "build": "pnpm --dir server build && pnpm --dir web build",
     "start": "pnpm --dir server start",
     "test": "pnpm --dir server test",
+    "watch": "node tools/watch.mjs",
     "demo": "node tools/mock-upstream.mjs"
   },
   "packageManager": "pnpm@11.10.0",

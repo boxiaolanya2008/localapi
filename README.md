@@ -28,6 +28,7 @@ cp .env.example .env   # 填 BASE_URL / API_KEY / MODEL / ADMIN_TOKEN
 ```bash
 pnpm start            # 一键启动(生产):后端 + 前端静态页,单端口 3000
 pnpm dev              # 开发模式:后端热更新 3000 + 前端热更新 5173
+pnpm watch            # 自研热更新:文件一保存自动重编并重启后端/重建前端
 pnpm demo             # 另开一个终端起本地 mock 上游(端口4000,零成本试跑)
 ```
 

@@ -555,6 +555,35 @@ export class Store {
     return { rows, total, page, size }
   }
 
+  // 按时间与筛选聚合用量(供时间范围统计)
+  usageAgg(f: { from?: number; to?: number; keyId?: string; channelId?: number; groupId?: number }): {
+    tokens: number
+    prompt_tokens: number
+    requests: number
+    cost: number
+    cache_hit: number
+  } {
+    const where: string[] = []
+    const vals: (string | number)[] = []
+    if (f.from) { where.push('ts >= ?'); vals.push(f.from) }
+    if (f.to) { where.push('ts <= ?'); vals.push(f.to) }
+    if (f.keyId) { where.push('key_id = ?'); vals.push(f.keyId) }
+    if (f.channelId) { where.push('channel_id = ?'); vals.push(f.channelId) }
+    if (f.groupId) { where.push('group_id = ?'); vals.push(f.groupId) }
+    const w = where.length ? 'WHERE ' + where.join(' AND ') : ''
+    const r = this.db
+      .prepare(
+        `SELECT COUNT(*) AS requests,
+                COALESCE(SUM(total_tokens), 0) AS tokens,
+                COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                COALESCE(SUM(cost), 0) AS cost,
+                COALESCE(SUM(cached_tokens), 0) AS cache_hit
+         FROM usage ${w}`
+      )
+      .get(...vals) as { requests: number; tokens: number; prompt_tokens: number; cost: number; cache_hit: number }
+    return r
+  }
+
   usageTotals(): { tokens: number; requests: number; cost: number; cache_hit: number } {
     const r = this.db
       .prepare('SELECT COALESCE(SUM(total_tokens), 0) AS tokens, COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(cached_tokens), 0) AS cache_hit FROM usage')

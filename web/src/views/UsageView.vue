@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import dayjs from 'dayjs'
 import api from '@/api'
@@ -14,22 +14,43 @@ const keyId = ref('')
 const channelId = ref<number>()
 const keys = ref<any[]>([])
 const channels = ref<any[]>([])
-const stats = ref<any>(null)
+const summary = ref<any>(null)
+const loadRange = ref('all') // all | today | 7d | 30d | custom
+
+async function setRange(days: number) {
+  const end = dayjs()
+  const start = dayjs().subtract(days - 1, 'day')
+  dateRange.value = [start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
+  loadRange.value = days === 1 ? 'today' : days === 7 ? '7d' : '30d'
+  page.value = 1
+  load()
+}
+
+function onDateChange() {
+  loadRange.value = dateRange.value?.length === 2 ? 'custom' : 'all'
+  page.value = 1
+  load()
+}
+
+function params() {
+  const p: Record<string, unknown> = {}
+  if (dateRange.value?.length === 2) {
+    p.from = dayjs(dateRange.value[0]).startOf('day').valueOf()
+    p.to = dayjs(dateRange.value[1]).endOf('day').valueOf()
+  }
+  if (keyId.value) p.keyId = keyId.value
+  if (channelId.value) p.channelId = channelId.value
+  return p
+}
 
 async function load() {
   loading.value = true
   try {
-    const params: Record<string, unknown> = { page: page.value, size: size.value }
-    if (dateRange.value?.length === 2) {
-      params.from = dayjs(dateRange.value[0]).startOf('day').valueOf()
-      params.to = dayjs(dateRange.value[1]).endOf('day').valueOf()
-    }
-    if (keyId.value) params.keyId = keyId.value
-    if (channelId.value) params.channelId = channelId.value
-    const [u, s] = await Promise.all([api.get('/admin/usage', { params }), api.get('/admin/stats')])
+    const base = { page: page.value, size: size.value, ...params() }
+    const [u, s] = await Promise.all([api.get('/admin/usage', { params: base }), api.get('/admin/usage/summary', { params: params() })])
     rows.value = u.data.rows
     total.value = u.data.total
-    stats.value = s.data
+    summary.value = s.data
   } finally {
     loading.value = false
   }
@@ -42,19 +63,17 @@ onMounted(async () => {
   channels.value = c.data
 })
 
-function quickRange(days: number) {
-  const end = dayjs()
-  const start = dayjs().subtract(days - 1, 'day')
-  dateRange.value = [start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD')]
+watch([keyId, channelId], () => {
   page.value = 1
   load()
-}
+})
 
 function reset() {
   page.value = 1
   dateRange.value = []
   keyId.value = ''
   channelId.value = undefined
+  loadRange.value = 'all'
   load()
 }
 
@@ -72,28 +91,30 @@ function hitLabel(cached: number, prompt: number): string {
   return `${cached} (${hitRatio(cached, prompt).toFixed(0)}%)`
 }
 
-const summary = computed(() => {
-  const t = stats.value?.total ?? {}
-  const today = stats.value?.today ?? {}
-  const ratio = t.tokens ? ((t.cache_hit ?? 0) / t.tokens) * 100 : 0
+const rangeLabel = computed(() => {
+  switch (loadRange.value) {
+    case 'today': return '今日'
+    case '7d': return '近 7 天'
+    case '30d': return '近 30 天'
+    case 'custom': return `自选 ${dateRange.value?.[0]} → ${dateRange.value?.[1]}`
+    default: return '全部时间'
+  }
+})
+
+const statCards = computed(() => {
+  const s = summary.value ?? {}
+  const ratio = s.tokens ? (s.cache_hit / s.tokens) * 100 : 0
   return {
-    todayRequests: today.requests ?? 0,
-    todayTokens: today.tokens ?? 0,
+    requests: s.requests ?? 0,
+    tokens: s.tokens ?? 0,
     cacheRatio: ratio,
-    cacheTokens: t.cache_hit ?? 0,
-    totalCost: t.cost ?? 0,
+    cacheTokens: s.cache_hit ?? 0,
+    cost: s.cost ?? 0,
   }
 })
 
 async function exportCsv() {
-  const params: Record<string, unknown> = {}
-  if (dateRange.value?.length === 2) {
-    params.from = dayjs(dateRange.value[0]).startOf('day').valueOf()
-    params.to = dayjs(dateRange.value[1]).endOf('day').valueOf()
-  }
-  if (keyId.value) params.keyId = keyId.value
-  if (channelId.value) params.channelId = channelId.value
-  const { data } = await api.get('/admin/usage/export', { params, responseType: 'blob' })
+  const { data } = await api.get('/admin/usage/export', { params: params(), responseType: 'blob' })
   const url = URL.createObjectURL(data as Blob)
   const a = document.createElement('a')
   a.href = url
@@ -105,39 +126,44 @@ async function exportCsv() {
 
 <template>
   <div class="page">
+    <div class="range-bar">
+      <div class="range-chip">{{ rangeLabel }}用量</div>
+      <el-button-group>
+        <el-button :type="loadRange === 'today' ? 'primary' : ''" @click="setRange(1)">今日</el-button>
+        <el-button :type="loadRange === '7d' ? 'primary' : ''" @click="setRange(7)">近 7 天</el-button>
+        <el-button :type="loadRange === '30d' ? 'primary' : ''" @click="setRange(30)">近 30 天</el-button>
+        <el-button :type="loadRange === 'all' ? 'primary' : ''" @click="reset">全部</el-button>
+      </el-button-group>
+    </div>
+
     <el-row :gutter="16" class="stats-row">
       <el-col :span="6" :xs="12">
         <div class="mini-stat">
           <div class="mini-icon green"><el-icon :size="20"><Icon icon="mdi:send-check-outline" /></el-icon></div>
-          <div><div class="mini-label">今日请求</div><div class="mini-value">{{ summary.todayRequests }}</div></div>
+          <div><div class="mini-label">请求数</div><div class="mini-value">{{ statCards.requests }}</div></div>
         </div>
       </el-col>
       <el-col :span="6" :xs="12">
         <div class="mini-stat">
           <div class="mini-icon blue"><el-icon :size="20"><Icon icon="mdi:lightning-bolt-outline" /></el-icon></div>
-          <div><div class="mini-label">今日 Token</div><div class="mini-value">{{ summary.todayTokens.toLocaleString() }}</div></div>
+          <div><div class="mini-label">Token 用量</div><div class="mini-value">{{ statCards.tokens.toLocaleString() }}</div></div>
         </div>
       </el-col>
       <el-col :span="6" :xs="12">
         <div class="mini-stat">
           <div class="mini-icon purple"><el-icon :size="20"><Icon icon="mdi:cached" /></el-icon></div>
-          <div><div class="mini-label">累计缓存命中</div><div class="mini-value">{{ summary.cacheRatio.toFixed(1) }}% <span class="mini-sub">{{ summary.cacheTokens.toLocaleString() }} tokens</span></div></div>
+          <div><div class="mini-label">缓存命中</div><div class="mini-value">{{ statCards.cacheRatio.toFixed(1) }}% <span class="mini-sub">{{ statCards.cacheTokens.toLocaleString() }}</span></div></div>
         </div>
       </el-col>
       <el-col :span="6" :xs="12">
         <div class="mini-stat">
           <div class="mini-icon orange"><el-icon :size="20"><Icon icon="mdi:currency-cny" /></el-icon></div>
-          <div><div class="mini-label">总费用</div><div class="mini-value">{{ Number(summary.totalCost).toFixed(4) }}</div></div>
+          <div><div class="mini-label">费用</div><div class="mini-value">{{ Number(statCards.cost).toFixed(4) }}</div></div>
         </div>
       </el-col>
     </el-row>
 
     <div class="card filter-card">
-      <el-button-group>
-        <el-button size="default" :type="dateRange?.length === 2 && dayjs(dateRange[0]).isSame(dayjs().startOf('day')) ? 'primary' : ''" @click="quickRange(1)">今天</el-button>
-        <el-button size="default" :type="dateRange?.length === 2 && dayjs(dateRange[0]).isSame(dayjs().subtract(6, 'day').startOf('day')) ? 'primary' : ''" @click="quickRange(7)">近 7 天</el-button>
-        <el-button size="default" :type="dateRange?.length === 2 && dayjs(dateRange[0]).isSame(dayjs().subtract(29, 'day').startOf('day')) ? 'primary' : ''" @click="quickRange(30)">近 30 天</el-button>
-      </el-button-group>
       <el-date-picker
         v-model="dateRange"
         type="daterange"
@@ -145,6 +171,7 @@ async function exportCsv() {
         end-placeholder="结束日期"
         value-format="YYYY-MM-DD"
         style="width: 240px"
+        @change="onDateChange"
       />
       <el-select v-model="keyId" placeholder="按密钥" clearable style="width: 150px">
         <el-option v-for="k in keys" :key="k.id" :label="k.name" :value="k.id" />
@@ -155,14 +182,14 @@ async function exportCsv() {
       <el-button type="primary" @click="page = 1; load()">
         <el-icon class="mr8"><Icon icon="mdi:magnify" /></el-icon>查询
       </el-button>
-      <el-button @click="reset">重置</el-button>
       <el-button @click="exportCsv">
         <el-icon class="mr8"><Icon icon="mdi:download-outline" /></el-icon>导出 CSV
       </el-button>
     </div>
 
     <div class="card table-card">
-      <el-table v-loading="loading" :data="rows" stripe class="modern-table">
+      <SkeletonBox v-if="loading" type="table" :count="6" />
+      <el-table v-else :data="rows" stripe class="modern-table">
         <el-table-column label="时间" width="140">
           <template #default="{ row }">
             <div class="t-time">{{ dayjs(row.ts).format('MM-DD HH:mm:ss') }}</div>
@@ -217,8 +244,24 @@ async function exportCsv() {
 </template>
 
 <style scoped lang="scss">
+.range-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.range-chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--brand);
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .stats-row {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .mini-stat {
@@ -228,7 +271,7 @@ async function exportCsv() {
   padding: 14px 16px;
   border-radius: $radius-md;
   background: var(--card-bg);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--glass-border);
   @include hover-lift;
 }
 
@@ -280,32 +323,12 @@ async function exportCsv() {
   overflow: hidden;
 }
 
-.modern-table :deep(.el-table__row) {
-  transition: background 0.2s ease;
-}
+.t-time { font-variant-numeric: tabular-nums; }
+.t-model { font-size: 12px; }
+.t-key { font-size: 12px; }
+.t-cost { color: var(--brand); font-weight: 600; }
 
-.t-time {
-  font-variant-numeric: tabular-nums;
-}
-
-.t-model {
-  font-size: 12px;
-}
-
-.t-key {
-  font-size: 12px;
-}
-
-.t-cost {
-  color: var(--brand);
-  font-weight: 600;
-}
-
-.cache-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.cache-cell { display: flex; align-items: center; gap: 8px; }
 
 .cache-bar {
   width: 52px;
@@ -323,9 +346,7 @@ async function exportCsv() {
   transition: width 0.3s ease;
 }
 
-.cache-text {
-  font-size: 12px;
-}
+.cache-text { font-size: 12px; }
 
 .status {
   display: inline-flex;
@@ -340,23 +361,8 @@ async function exportCsv() {
     display: inline-block;
   }
 
-  &.ok {
-    color: var(--brand);
-
-    .dot {
-      background: var(--brand);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
-    }
-  }
-
-  &.err {
-    color: #ef4444;
-
-    .dot {
-      background: #ef4444;
-      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
-    }
-  }
+  &.ok { color: var(--brand); .dot { background: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); } }
+  &.err { color: #ef4444; .dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); } }
 }
 
 .pager {

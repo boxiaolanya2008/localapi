@@ -96,6 +96,38 @@ function extractCached(usage: Record<string, unknown> | null): number {
   return Number.isFinite(n) && n > 0 ? n : 0
 }
 
+// 无 usage 时估算用的文本:只取消息正文,不把整包 JSON 算进去,避免 token 数被结构开销夸大
+function promptTextOf(body: Record<string, unknown>): string {
+  const msgs = Array.isArray(body.messages) ? (body.messages as Record<string, unknown>[]) : []
+  let s = ''
+  for (const m of msgs) {
+    if (!m || typeof m !== 'object') continue
+    const c = m.content
+    if (typeof c === 'string') s += c
+    else if (Array.isArray(c)) {
+      for (const b of c) {
+        if (b && typeof b === 'object' && 'text' in (b as Record<string, unknown>)) s += String((b as { text: unknown }).text ?? '')
+      }
+    }
+  }
+  return s
+}
+
+function completionTextOf(data: Record<string, unknown> | null): string {
+  if (!data) return ''
+  const c = (data.choices as Array<{ message?: { content?: unknown } }> | undefined)?.[0]?.message
+  const content = c?.content
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    let s = ''
+    for (const b of content) {
+      if (b && typeof b === 'object' && 'text' in (b as Record<string, unknown>)) s += String((b as { text: unknown }).text ?? '')
+    }
+    return s
+  }
+  return ''
+}
+
 async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: Store): Promise<void> {
   const key = (req as Req & { localkey: KeyRow }).localkey
   const started = now()
@@ -212,8 +244,8 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
     // 上游返回了非法 JSON,按错误记录
   }
   const usage = data && typeof data.usage === 'object' ? (data.usage as Record<string, unknown>) : null
-  const pt = usage && Number.isFinite(Number(usage.prompt_tokens)) ? Number(usage.prompt_tokens) : estimateTokens(jsonStr(upstreamBody))
-  const ct = usage && Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : estimateTokens(payload)
+  const pt = usage && Number.isFinite(Number(usage.prompt_tokens)) ? Number(usage.prompt_tokens) : estimateTokens(promptTextOf(upstreamBody))
+  const ct = usage && Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : estimateTokens(completionTextOf(data))
   recordOk(store, key, picked.channel, model ?? '', started, pt, ct, extractCached(usage), uuid(), null)
   res.set('content-type', 'application/json').status(upstream.status).send(payload)
 }
@@ -262,9 +294,9 @@ async function handleStream(
   res.flushHeaders()
 
   let usage: { prompt_tokens: number; completion_tokens: number; cached_tokens: number } | null = null
-  let outChars = 0
+  let contentLen = 0
   let tail = ''
-  const promptEst = estimateTokens(jsonStr(upstreamBody))
+  const promptEst = estimateTokens(promptTextOf(upstreamBody))
   const ensureDone = () => {
     // 上游没发 OpenAI 终止帧 [DONE] 时补一个,避免客户端报 "stream ended without terminal event"
     if (!tail.includes('[DONE]')) res.write('data: [DONE]\n\n')
@@ -273,8 +305,8 @@ async function handleStream(
   try {
     for await (const chunk of upstream.body as unknown as AsyncIterable<Uint8Array>) {
       const text = chunk instanceof Uint8Array ? Buffer.from(chunk).toString('utf8') : String(chunk)
-      outChars += text.length
       tail = (tail + text).slice(-128)
+      contentLen += streamContentLength(text)
       usage = usage ?? extractUsage(text)
       res.write(chunk instanceof Uint8Array ? chunk : Buffer.from(text))
     }
@@ -287,11 +319,31 @@ async function handleStream(
   }
 
   const pt = usage?.prompt_tokens ?? promptEst
-  const ct = usage?.completion_tokens ?? estimateTokens(String(outChars))
+  const ct = usage?.completion_tokens ?? estimateTokens(String(contentLen))
   const cached = usage?.cached_tokens ?? 0
   recordOk(store, key, channel, model, started, pt, ct, cached, requestId, now() - started)
   ensureDone()
   res.end()
+}
+
+// 统计流里 delta.content 的字符数(不含 SSE/JSON 结构),用于无 usage 时的估算
+function streamContentLength(sseText: string): number {
+  const lines = sseText.split('\n')
+  let n = 0
+  for (const line of lines) {
+    if (!line.startsWith('data:')) continue
+    const json = line.slice(5).trim()
+    if (!json || json === '[DONE]') continue
+    try {
+      const obj = JSON.parse(json)
+      const d = obj?.choices?.[0]?.delta
+      const c = d?.content
+      if (typeof c === 'string') n += c.length
+    } catch {
+      // 非 JSON 帧(如注释行)忽略
+    }
+  }
+  return n
 }
 
 function extractUsage(text: string): { prompt_tokens: number; completion_tokens: number; cached_tokens: number } | null {

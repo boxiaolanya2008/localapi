@@ -43,7 +43,8 @@ pnpm install
 cp .env.example .env   # then edit ADMIN_TOKEN, really
 ```
 
-> IMPORTANT: Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
+> [!IMPORTANT]
+> Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
 
 ## Quick Start
 
@@ -68,6 +69,14 @@ Open `http://127.0.0.1:3000`, enter `ADMIN_TOKEN`. First time: Catalog -> Add as
 
 Desktop: download `LocalAPI-0.4.0-*.exe` or `portable` from [Releases](https://github.com/boxiaolanya2008/localapi/releases/tag/v0.4.0), install, tray icon -> Show. Data and logs are under `userData/localapi-data/desktop.log`.
 
+> [!NOTE]
+> Only Windows x64 is provided. SmartScreen may warn “Unknown publisher” — the app is not code-signed yet, click “Run anyway”. If you prefer, build from source.
+> 安装包只提供 Windows x64 版本。Windows 可能会弹 SmartScreen 提示「未知发布者」——应用目前没有做代码签名，点「仍要运行」即可；介意的话可以自己从源码构建。
+
+> [!WARNING]
+> Download only from this repo's Releases page. Do not use repackaged binaries from third parties.
+> 请只从本仓库的 Releases 页面下载安装包，不要使用任何第三方转载的版本。
+
 ## Configuration
 
 Only these live in `.env`. Everything else is in the panel.
@@ -80,7 +89,8 @@ MODEL_MAP=gpt-4o-mini=my-model,claude-sonnet=claude-3-5-sonnet-20241022
 DATA_DIR=           # empty = <repo>/data, desktop = userData/localapi-data
 ```
 
-> WARNING: `HOST=0.0.0.0` exposes the relay to LAN. Keep `127.0.0.1` unless you know what you're doing. `ADMIN_TOKEN` is the only auth for `/admin`.
+> [!WARNING]
+> `HOST=0.0.0.0` exposes the relay to LAN. Keep `127.0.0.1` unless you know what you're doing. `ADMIN_TOKEN` is the only auth for `/admin`.
 
 ## Using the Panel
 
@@ -118,7 +128,8 @@ GET /admin/stats          # today/total/7d/byChannel/byModel/byGroup/topKeys/bal
 GET/PUT /admin/settings/md
 ```
 
-> NOTE: Desktop's `preload.ts` exposes `window.localapi.getAppInfo()` for version/dataDir/serverUrl.
+> [!NOTE]
+> Desktop's `preload.ts` exposes `window.localapi.getAppInfo()` for version/dataDir/serverUrl.
 
 ## Structure
 

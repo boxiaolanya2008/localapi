@@ -1,5 +1,8 @@
 # Changelog
 
+> [!NOTE]
+> 版本号遵循 `0.x` 快速迭代，`0.4.0` 起含桌面端。升级前备份 `data/localapi.db`。
+
 ## 0.4.0 - 2026-08-22
 
 - 新增桌面端：Electron 壳，一键启动中转与管理台，无需终端；托盘常驻、数据落 `userData/localapi-data`，首次启动自动生成 `ADMIN_TOKEN` (#3)

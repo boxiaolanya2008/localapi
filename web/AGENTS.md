@@ -22,3 +22,6 @@
 - 元素组件全局注册(main.ts),API 类(ElMessage 等)由 unplugin-auto-import 引入
 - 禁用 emoji,图标一律 iconify
 - 构建产物 web/dist-web,由 server 静态托管
+
+> [!NOTE]
+> `web/dist-web` 由 `vite build` 生成，上线前务必 `pnpm --dir web build`，否则 `server` 兜底页会提示未构建。

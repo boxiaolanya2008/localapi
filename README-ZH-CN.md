@@ -43,7 +43,8 @@ pnpm install
 cp .env.example .env   # 然后把 ADMIN_TOKEN 改掉
 ```
 
-> IMPORTANT：`ADMIN_TOKEN` 不改别往公网放。`change-me-...` 只是占位，6 个字符也能跑，但那就等于没锁。
+> [!IMPORTANT]
+> `ADMIN_TOKEN` 不改别往公网放。`change-me-...` 只是占位，6 个字符也能跑，但那就等于没锁。
 
 ## 快速开始
 
@@ -68,6 +69,12 @@ export OPENAI_API_KEY=sk-lapi-xxx   # 网页 密钥管理 里建
 
 桌面版：去 [Releases](https://github.com/boxiaolanya2008/localapi/releases/tag/v0.4.0) 下 `LocalAPI-0.4.0-*.exe` 或 portable，装好托盘点显示。数据与日志在 `userData/localapi-data/desktop.log`。
 
+> [!NOTE]
+> 安装包只提供 Windows x64 版本。Windows 可能会弹 SmartScreen 提示「未知发布者」——应用目前没有做代码签名，点「仍要运行」即可；介意的话可以自己从源码构建。
+
+> [!WARNING]
+> 请只从本仓库的 Releases 页面下载安装包，不要使用任何第三方转载的版本。
+
 ## 配置
 
 `.env` 只留服务级参数，其他全在网页。
@@ -80,7 +87,8 @@ MODEL_MAP=gpt-4o-mini=内部名,claude-sonnet=claude-3-5-sonnet-20241022
 DATA_DIR=           # 空 = <仓库>/data，桌面端 = userData/localapi-data
 ```
 
-> WARNING：`HOST=0.0.0.0` 会暴露到局域网。默认 `127.0.0.1` 最稳，别乱改。
+> [!WARNING]
+> `HOST=0.0.0.0` 会暴露到局域网。默认 `127.0.0.1` 最稳，别乱改。
 
 ## 面板怎么用
 
@@ -118,7 +126,8 @@ GET /admin/stats
 GET/PUT /admin/settings/md
 ```
 
-> NOTE：桌面 `preload.ts` 暴露 `window.localapi.getAppInfo()` 拿版本与路径。
+> [!NOTE]
+> 桌面 `preload.ts` 暴露 `window.localapi.getAppInfo()` 拿版本与路径。
 
 ## 目录
 

@@ -18,3 +18,6 @@
 ## 编码规则
 
 沿用根 .simple-dev 预设:无装饰注释、禁 emoji、语法极简、conventional commit。
+
+> [!TIP]
+> 改 `db.ts` 后务必跑 `pnpm --dir server test`，18/18 过再提 PR。

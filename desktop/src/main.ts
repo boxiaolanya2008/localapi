@@ -136,7 +136,7 @@ function createWindow(): void {
       preload: path.join(here, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
     autoHideMenuBar: true,
   })

@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -13,19 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir server build
       - run: pnpm --dir web build
       - run: pnpm --dir desktop build
-      - run: pnpm --dir desktop dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --dir desktop exec electron-builder --win --x64 --publish never
       - uses: softprops/action-gh-release@v2
         with:
           files: release/**/*

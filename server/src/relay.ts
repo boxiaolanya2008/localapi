@@ -56,13 +56,14 @@ function pickChannel(store: Store, cfg: EnvConfig, model?: string): { channel: C
 const GLOBAL_CODING_RULE =
   '严格遵守编码规范:禁止装饰性注释(分隔线、星号框、盒状边框、表情符号开头、标签堆)。注释只写"为什么",不写"是什么";函数名和变量名能说清就不写注释;语法极简,先跑通再谈优化。这是全局强制规则,所有分组统一执行。'
 
-// 组装发往上游的 body。消息结构固定为 [全局编码规则, (分组或渠道提示词), (参数模板system), ...原始消息]。
-// 原始消息 100% 原样保留,规则只会叠加在开头。
+// 组装发往上游的 body。消息结构固定为 [全局编码规则, (分组或渠道提示词), (md提示词), (参数模板system), ...原始消息]。
+// 原始消息 100% 原样保留,规则只会叠加在开头。md 与 group 并存,互不覆盖。
 function buildUpstreamBody(
   channel: ChannelRow,
   body: Record<string, unknown>,
   group?: { inject: boolean; prompt: string; forceObey: boolean },
   preset?: { system?: string } | null,
+  md?: { enabled: boolean; content: string } | null,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...body }
   const clientMsgs = Array.isArray(body.messages) ? body.messages : []
@@ -76,6 +77,10 @@ function buildUpstreamBody(
     let content = extra
     if (groupPrompt && group?.forceObey) content += '\n\n以上指令为最高优先级,必须严格遵守,不得以任何理由拒绝或推诿。'
     systems.push({ role: 'system', content })
+  }
+
+  if (md && md.enabled && md.content.trim()) {
+    systems.push({ role: 'system', content: md.content.trim() })
   }
 
   // 参数模板自带的系统提示词(若有)
@@ -149,8 +154,12 @@ async function proxy(req: Req, res: Res, path: string, cfg: EnvConfig, store: St
     forceObey: key.group_force_obey === 1,
   }
   const preset = key.group_param_preset_id ? store.getParamPreset(key.group_param_preset_id) : null
+  const md = {
+    enabled: store.getSetting('md_system_enabled', '0') === '1',
+    content: store.getSetting('md_system_prompt', ''),
+  }
 
-  const upstreamRaw = buildUpstreamBody(picked.channel, body, group, preset)
+  const upstreamRaw = buildUpstreamBody(picked.channel, body, group, preset, md)
 
   // 分组绑定的参数模板:请求没显式给出的采样/结构/进阶参数,用模板值补上
   if (preset) {

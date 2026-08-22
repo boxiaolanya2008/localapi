@@ -18,8 +18,27 @@ const armorForm = ref({ prompt: '', enabled: true, force: true })
 const armorGroup = computed(
   () => groups.value.find((g) => g.inject_system === 1) ?? groups.value.find((g) => g.name === '破甲') ?? null,
 )
-// 可用提示词:免费预设 + (解锁后)付费预设
 const promptOptions = computed(() => [...PROMPT_PRESETS, ...(unlocked.value ? PREMIUM_PROMPTS : [])])
+
+const mdEnabled = ref(false)
+const mdName = ref('')
+const mdContent = ref('')
+const mdUpdatedAt = ref<number | null>(null)
+const mdSaving = ref(false)
+const mdCollapsed = ref(true)
+const mdFileInput = ref<HTMLInputElement | null>(null)
+const mdCharCount = computed(() => mdContent.value.length)
+const mdUpdatedText = computed(() => {
+  if (!mdUpdatedAt.value) return '未设置'
+  return new Date(mdUpdatedAt.value).toLocaleString()
+})
+
+function applyMdData(d: any) {
+  mdEnabled.value = !!d.enabled
+  mdName.value = d.name || ''
+  mdContent.value = d.content || ''
+  mdUpdatedAt.value = d.updatedAt ?? d.updated_at ?? null
+}
 
 async function load() {
   loading.value = true
@@ -33,6 +52,14 @@ async function load() {
     const ag = g.data.find((x: any) => x.inject_system === 1) ?? g.data.find((x: any) => x.name === '破甲')
     if (ag) {
       armorForm.value = { prompt: ag.system_prompt || '', enabled: !!ag.inject_system, force: !!ag.force_obey }
+    }
+    if (s.data.mdPrompt) {
+      applyMdData(s.data.mdPrompt)
+    } else {
+      try {
+        const { data } = await api.get('/admin/settings/md')
+        applyMdData(data)
+      } catch {}
     }
   } finally {
     loading.value = false
@@ -54,7 +81,6 @@ async function activate() {
       ElMessage.success('解锁成功,付费提示词已开放')
     }
   } catch {
-    // 拦截器已提示
   } finally {
     activating.value = false
   }
@@ -90,6 +116,78 @@ async function saveDefaults() {
 const env = () => info.value?.env ?? {}
 const modelMapEntries = computed(() => Object.entries(info.value?.env?.modelMap ?? {}))
 const armorPresetId = ref('')
+
+function triggerMdPick() {
+  mdFileInput.value?.click()
+}
+
+function onMdFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const lower = file.name.toLowerCase()
+  const ok = lower.endsWith('.md') || lower.endsWith('.markdown') || lower.endsWith('.txt') || lower.endsWith('.mdx')
+  if (!ok) {
+    ElMessage.warning('仅支持 .md / .markdown / .txt / .mdx 文件')
+    input.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    const text = String(reader.result ?? '')
+    if (text.length > 50000) {
+      ElMessage.error('文件过大(>50k)，请选择更小的文件')
+      input.value = ''
+      return
+    }
+    mdName.value = file.name
+    mdContent.value = text
+    mdCollapsed.value = false
+    ElMessage.success(`已读取 ${file.name} (${text.length} 字符)，点保存后生效`)
+    input.value = ''
+  }
+  reader.onerror = () => {
+    ElMessage.error('读取文件失败')
+    input.value = ''
+  }
+  reader.readAsText(file)
+}
+
+async function saveMd() {
+  if (mdContent.value.length > 50000) {
+    ElMessage.error('内容过大(>50k)，请删减后重试')
+    return
+  }
+  mdSaving.value = true
+  try {
+    const { data } = await api.put('/admin/settings/md', {
+      enabled: mdEnabled.value ? 1 : 0,
+      name: mdName.value,
+      content: mdContent.value,
+    })
+    applyMdData(data)
+    ElMessage.success('本地 MD 系统提示词已保存')
+  } finally {
+    mdSaving.value = false
+  }
+}
+
+async function enableAndSaveMd() {
+  mdEnabled.value = true
+  await saveMd()
+}
+
+async function clearMd() {
+  mdSaving.value = true
+  try {
+    const { data } = await api.put('/admin/settings/md', { enabled: 0, name: '', content: '' })
+    applyMdData(data)
+    mdCollapsed.value = true
+    ElMessage.success('已清空本地 MD 系统提示词')
+  } finally {
+    mdSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -176,6 +274,45 @@ const armorPresetId = ref('')
             <div class="kv-row"><span class="k">技术栈</span><span class="v">Node 内置 node:sqlite · Express · Vue 3 · Element Plus · ECharts</span></div>
           </div>
           <p class="muted mt16">本地工具,默认只监听 127.0.0.1。余额为「上游实时查询失败时按 额度-累计消耗 估算」。</p>
+        </div>
+
+        <div class="card mt16" v-loading="mdSaving">
+          <div class="card-title"><el-icon class="mr8"><Icon icon="mdi:file-document-outline" /></el-icon>本地 MD 系统提示词</div>
+          <p class="muted">不覆盖分组提示词，请求时按 [全局规则, 分组, 本地MD, 模板] 顺序叠加。关闭后请求 100% 透传（除全局规则外）。仅本地读取，不自动上传；选择文件后需点“保存”才会生效，单文件限 50k 字符。</p>
+          <div class="md-meta">
+            <el-switch v-model="mdEnabled" active-text="启用" inactive-text="禁用" />
+            <el-tag size="small" :type="mdEnabled ? 'success' : 'info'" effect="plain">{{ mdEnabled ? '已启用' : '已禁用' }}</el-tag>
+            <span class="muted mono" v-if="mdName"><el-icon class="mr8"><Icon icon="mdi:file-outline" /></el-icon>{{ mdName }}</span>
+            <span class="muted" v-else>未选择文件</span>
+            <span class="muted"><el-icon class="mr8"><Icon icon="mdi:clock-outline" /></el-icon>{{ mdUpdatedText }}</span>
+            <el-tag size="small" effect="plain" :type="mdCharCount > 50000 ? 'danger' : 'info'">{{ mdCharCount.toLocaleString() }} / 50,000 字符</el-tag>
+          </div>
+          <div class="md-actions">
+            <input ref="mdFileInput" type="file" accept=".md,.markdown,.txt,.mdx" style="display: none" @change="onMdFileChange" />
+            <el-button @click="triggerMdPick">
+              <el-icon class="mr8"><Icon icon="mdi:upload-outline" /></el-icon>选择本地 .md 文件
+            </el-button>
+            <el-button type="success" plain :loading="mdSaving" :disabled="!mdContent" @click="enableAndSaveMd">
+              <el-icon class="mr8"><Icon icon="mdi:check-circle-outline" /></el-icon>一键启用+保存
+            </el-button>
+            <el-button type="primary" :loading="mdSaving" @click="saveMd">
+              <el-icon class="mr8"><Icon icon="mdi:content-save-outline" /></el-icon>保存
+            </el-button>
+            <el-button plain :loading="mdSaving" @click="clearMd">
+              <el-icon class="mr8"><Icon icon="mdi:delete-outline" /></el-icon>清空
+            </el-button>
+          </div>
+          <div v-if="mdContent" class="md-preview-wrap">
+            <div class="md-preview-head">
+              <span class="muted">内容预览 · 保留换行 · 只读</span>
+              <el-button size="small" link @click="mdCollapsed = !mdCollapsed">
+                <el-icon class="mr8"><Icon :icon="mdCollapsed ? 'mdi:eye-outline' : 'mdi:eye-off-outline'" /></el-icon>{{ mdCollapsed ? '展开' : '折叠' }}
+              </el-button>
+            </div>
+            <div class="md-preview" :class="{ collapsed: mdCollapsed }">{{ mdContent }}</div>
+          </div>
+          <div v-else class="md-empty muted"><el-icon class="mr8"><Icon icon="mdi:file-document-outline" /></el-icon>暂无内容，选择 .md / .markdown / .txt / .mdx 文件后在此预览</div>
+          <p class="muted mt16">支持 .md / .markdown / .txt / .mdx，建议单个文件 &lt; 50k 字符；启用后对所有请求生效，与分组提示词叠加而非覆盖。</p>
         </div>
       </el-col>
     </el-row>
@@ -287,5 +424,61 @@ const armorPresetId = ref('')
 
 .ml {
   margin-left: 10px;
+}
+
+.md-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.md-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.md-preview-wrap {
+  margin-top: 14px;
+}
+
+.md-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.md-preview {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--app-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 320px;
+  overflow: auto;
+
+  &.collapsed {
+    max-height: 160px;
+  }
+}
+
+.md-empty {
+  margin-top: 14px;
+  padding: 18px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-soft);
+  background: var(--app-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 </style>

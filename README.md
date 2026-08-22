@@ -119,7 +119,8 @@ GET /admin/stats          # today/total/7d/byChannel/byModel/byGroup/topKeys/bal
 GET/PUT /admin/settings/md
 ```
 
-> NOTE: Desktop's `preload.ts` exposes `window.localapi.getAppInfo()` for version/dataDir/serverUrl.
+> [!NOTE]
+> Desktop's `preload.ts` exposes `window.localapi.getAppInfo()` for version/dataDir/serverUrl.
 
 ## Structure
 

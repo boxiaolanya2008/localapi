@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 - 2026-08-22
+
+- 新增桌面端：Electron 壳，一键启动中转与管理台，无需终端；托盘常驻、数据落 `userData/localapi-data`，首次启动自动生成 `ADMIN_TOKEN` (#3)
+- 新增本地 MD 系统提示词：设置页自选本地 `.md` 文件作系统提示词，与分组提示词叠加不覆盖，顺序 [全局规则, 分组, 本地MD, 模板] (#2)
+- 补齐 GitHub 仓库规范：`README-ZH-CN` / `CODE_OF_CONDUCT` / `SECURITY` / `.githooks` 五位 AI 共创者 / `workflows/ci` / `dependabot` (#1)
+
 ## 0.3.1 - 2026-08-18
 
 - 新增自研热更新:`pnpm watch`(原生 fs.watch)文件一保存自动重编并重启后端/重建前端

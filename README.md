@@ -43,7 +43,7 @@ pnpm install
 cp .env.example .env   # then edit ADMIN_TOKEN, really
 ```
 
-> IMPORTANT: Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
+> ［!IMPORTANT］: Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
 
 ## Quick Start
 

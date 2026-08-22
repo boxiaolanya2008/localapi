@@ -43,7 +43,8 @@ pnpm install
 cp .env.example .env   # 然后把 ADMIN_TOKEN 改掉
 ```
 
-> IMPORTANT：`ADMIN_TOKEN` 不改别往公网放。`change-me-...` 只是占位，6 个字符也能跑，但那就等于没锁。
+> [!IMPORTANT]
+> `ADMIN_TOKEN` 不改别往公网放。`change-me-...` 只是占位，6 个字符也能跑，但那就等于没锁。
 
 ## 快速开始
 
@@ -80,7 +81,8 @@ MODEL_MAP=gpt-4o-mini=内部名,claude-sonnet=claude-3-5-sonnet-20241022
 DATA_DIR=           # 空 = <仓库>/data，桌面端 = userData/localapi-data
 ```
 
-> WARNING：`HOST=0.0.0.0` 会暴露到局域网。默认 `127.0.0.1` 最稳，别乱改。
+> [!WARNING]
+> `HOST=0.0.0.0` 会暴露到局域网。默认 `127.0.0.1` 最稳，别乱改。
 
 ## 面板怎么用
 
@@ -118,7 +120,8 @@ GET /admin/stats
 GET/PUT /admin/settings/md
 ```
 
-> NOTE：桌面 `preload.ts` 暴露 `window.localapi.getAppInfo()` 拿版本与路径。
+> [!NOTE]
+> 桌面 `preload.ts` 暴露 `window.localapi.getAppInfo()` 拿版本与路径。
 
 ## 目录
 

@@ -27,10 +27,14 @@ cp .env.example .env   # 填 BASE_URL / API_KEY / MODEL / ADMIN_TOKEN
 
 ```bash
 pnpm start            # 一键启动(生产):后端 + 前端静态页,单端口 3000
-pnpm dev              # 开发模式:后端热更新 3000 + 前端热更新 5173
+pnpm dev              # 开发模式:后端 3000 + 前端 5173 (默认仅 Web，不含桌面端)
+pnpm desktop          # 桌面端: Electron 壳(自带服务，无需另起 pnpm dev)
 pnpm watch            # 自研热更新:文件一保存自动重编并重启后端/重建前端
 pnpm demo             # 另开一个终端起本地 mock 上游(端口4000,零成本试跑)
 ```
+
+> [!NOTE]
+> 默认 `pnpm dev` 仅启动 Web，需要桌面端时用 `pnpm desktop` 或 `pnpm dev:desktop`；`pnpm dev:all` 会同时启动 server+web+desktop（一般不需要，桌面端已内置服务）。
 
 一次只敲一条命令。日常用 `pnpm start` 就够了;`.env` 里 BASE_URL 指向 mock 时,先 `pnpm demo` 再 `pnpm start`。
 

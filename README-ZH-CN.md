@@ -32,10 +32,14 @@ cp .env.example .env   # 改 ADMIN_TOKEN，必须
 
 ```bash
 pnpm start   # 生产：后端 + 前端静态，单端口 3000
-pnpm dev     # 开发：后端 3000 + 前端 5173，双热更新
+pnpm dev     # 开发：后端 3000 + 前端 5173，双热更新（默认仅 Web，不含桌面端）
+pnpm desktop # 桌面端: Electron 壳(自带服务，无需另起 pnpm dev)
 pnpm watch   # 自研热更新：保存即重编重启
 pnpm demo    # 本地 mock 上游 4000，零成本试跑
 ```
+
+> [!NOTE]
+> 默认 `pnpm dev` 仅启动 Web，需要桌面端时用 `pnpm desktop` 或 `pnpm dev:desktop`；`pnpm dev:all` 会同时启动 server+web+desktop（一般不需要，桌面端已内置服务）。
 
 日常 `pnpm start` 一个命令就够。`.env` 指到 mock 时先 `pnpm demo` 再 `pnpm start`。改前端后 `pnpm build`。
 

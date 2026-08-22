@@ -8,7 +8,9 @@
     "url": "https://github.com/boxiaolanya2008/localapi.git"
   },
   "scripts": {
-    "dev": "pnpm -r --parallel run dev",
+    "dev": "pnpm --filter \"./server\" --filter \"./web\" --parallel dev",
+    "dev:desktop": "pnpm --dir desktop dev",
+    "dev:all": "pnpm -r --parallel run dev",
     "build": "pnpm --dir server build && pnpm --dir web build",
     "build:desktop": "pnpm --dir server build && pnpm --dir web build && pnpm --dir desktop build",
     "dist:desktop": "pnpm build:desktop && pnpm --dir desktop dist:dir",

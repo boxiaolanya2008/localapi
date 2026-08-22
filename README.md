@@ -80,7 +80,7 @@ MODEL_MAP=gpt-4o-mini=my-model,claude-sonnet=claude-3-5-sonnet-20241022
 DATA_DIR=           # empty = <repo>/data, desktop = userData/localapi-data
 ```
 
->［!WARNING］
+> [!WARNING]
 > `HOST=0.0.0.0` exposes the relay to LAN. Keep `127.0.0.1` unless you know what you're doing. `ADMIN_TOKEN` is the only auth for `/admin`.
 
 ## Using the Panel

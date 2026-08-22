@@ -4,6 +4,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -21,9 +24,7 @@ jobs:
       - run: pnpm --dir server build
       - run: pnpm --dir web build
       - run: pnpm --dir desktop build
-      - run: pnpm --dir desktop dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm --dir desktop exec electron-builder --win --x64 --publish never
       - uses: softprops/action-gh-release@v2
         with:
           files: release/**/*

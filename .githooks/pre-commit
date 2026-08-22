@@ -1,0 +1,19 @@
+#!/bin/sh
+# pre-commit hook — 轻量门禁，不卡手
+# - 禁止提交含 emoji
+# - 提示 AGENTS.md 约束
+
+set -e
+
+# 禁止 emoji（常见范围抽检）
+if git diff --cached --name-only | xargs -I {} sh -c 'git diff --cached -- "{}" | grep -P "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]" >/dev/null 2>&1' 2>/dev/null; then
+  echo "WARNING: 检测到 emoji，请改用 SVG（iconify）。提交已拦截。"
+  exit 1
+fi
+
+# 共创者名单校验（仅提醒）
+if [ ! -f ".githooks/AI-CREATORS" ]; then
+  echo "NOTE: 缺少 .githooks/AI-CREATORS，请补全五位共创者声明。"
+fi
+
+exit 0

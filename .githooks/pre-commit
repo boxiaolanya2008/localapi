@@ -5,10 +5,12 @@
 
 set -e
 
-# 禁止 emoji（常见范围抽检）
-if git diff --cached --name-only | xargs -I {} sh -c 'git diff --cached -- "{}" | grep -P "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]" >/dev/null 2>&1' 2>/dev/null; then
-  echo "WARNING: 检测到 emoji，请改用 SVG（iconify）。提交已拦截。"
-  exit 1
+# 禁止 emoji（常见范围抽检）——仅在有暂存文件时检测，中文不受影响
+if git diff --cached --name-only | grep -q .; then
+  if git diff --cached | grep -P "[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F600}-\x{1F64F}\x{1F900}-\x{1F9FF}\x{1FA70}-\x{1FAFF}]" >/dev/null 2>&1; then
+    echo "WARNING: 检测到 emoji，请改用 SVG（iconify）。提交已拦截。"
+    exit 1
+  fi
 fi
 
 # 共创者名单校验（仅提醒）

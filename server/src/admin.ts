@@ -220,6 +220,7 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
   // ---- settings ----
 
   r.get('/settings', (_req, res) => {
+    const mdRaw = store.getSetting('md_system_updated_at', '')
     res.json({
       version: '0.1.0',
       env: {
@@ -235,6 +236,12 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
       },
       features: {
         premiumUnlocked: store.getSetting('feature_unlocked', '0') === '1',
+      },
+      mdPrompt: {
+        enabled: store.getSetting('md_system_enabled', '0') === '1',
+        name: store.getSetting('md_system_name', ''),
+        content: store.getSetting('md_system_prompt', ''),
+        updatedAt: mdRaw ? Number(mdRaw) : null,
       },
     })
   })
@@ -255,6 +262,46 @@ export function adminRouter(store: Store, cfg: EnvConfig): Router {
       return res.json({ ok: true, unlocked: true })
     }
     res.status(403).json({ message: '解锁密钥无效' })
+  })
+
+  r.get('/settings/md', (_req, res) => {
+    const raw = store.getSetting('md_system_updated_at', '')
+    res.json({
+      enabled: store.getSetting('md_system_enabled', '0') === '1',
+      name: store.getSetting('md_system_name', ''),
+      content: store.getSetting('md_system_prompt', ''),
+      updatedAt: raw ? Number(raw) : null,
+    })
+  })
+
+  r.put('/settings/md', (req, res) => {
+    const body = req.body ?? {}
+    let touched = false
+    if (body.content !== undefined) {
+      const content = String(body.content)
+      if (content.length > 50000) return res.status(400).json({ message: 'content too long, max 50000 chars' })
+      store.setSetting('md_system_prompt', content)
+      touched = true
+    }
+    if (body.enabled !== undefined) {
+      const v = body.enabled
+      const enabled = v === true || v === 1 || v === '1' || v === 'true' ? '1' : '0'
+      store.setSetting('md_system_enabled', enabled)
+      touched = true
+    }
+    if (body.name !== undefined) {
+      store.setSetting('md_system_name', String(body.name))
+      touched = true
+    }
+    if (touched) store.setSetting('md_system_updated_at', String(now()))
+    const raw = store.getSetting('md_system_updated_at', '')
+    res.json({
+      ok: true,
+      enabled: store.getSetting('md_system_enabled', '0') === '1',
+      name: store.getSetting('md_system_name', ''),
+      content: store.getSetting('md_system_prompt', ''),
+      updatedAt: raw ? Number(raw) : null,
+    })
   })
 
   // ---- param presets ----

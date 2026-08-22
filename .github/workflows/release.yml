@@ -25,7 +25,7 @@ jobs:
       - run: pnpm --dir web build
       - run: pnpm --dir desktop build
       - run: pnpm --dir desktop exec electron-builder --win --x64 --publish never
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: release/**/*
           generate_release_notes: false

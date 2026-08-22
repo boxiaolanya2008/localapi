@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 - 2026-08-22
+
+- 修复桌面端打包后启动 `EPIPE: broken pipe, write`:GUI 无控制台时 `console.log` 抛未捕获异常,改为文件日志容错 + `stdout.writable` 判断 + 全局吞 EPIPE 与 uncaughtException (#29)
+- 修复桌面端子进程 `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`:Electron 30 内置 Node 20 无该模块,升级 Electron 至 35(内置 Node 22.16)并以 `ELECTRON_RUN_AS_NODE=1` 启动服务子进程 (#30)
+
 ## 0.4.0 - 2026-08-22
 
 - 新增桌面端：Electron 壳，一键启动中转与管理台，无需终端；托盘常驻、数据落 `userData/localapi-data`，首次启动自动生成 `ADMIN_TOKEN` (#3)

@@ -1,6 +1,6 @@
 {
   "name": "localapi",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "本地 API 中转站:OpenAI 兼容中转 + Vue 管理台 / Local OpenAI-compatible API relay with Vue admin dashboard",
   "repository": {

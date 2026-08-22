@@ -1,6 +1,6 @@
 {
   "name": "localapi-desktop",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "LocalAPI Desktop - Electron wrapper for LocalAPI relay with Vue admin",
@@ -21,7 +21,7 @@
   "dependencies": {},
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "electron": "^30.5.1",
+    "electron": "^35.7.5",
     "electron-builder": "^24.13.3",
     "typescript": "^5.7.2"
   },

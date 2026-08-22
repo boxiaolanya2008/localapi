@@ -7,6 +7,26 @@ import { fileURLToPath } from 'node:url'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const isPackaged = app.isPackaged
 
+// GUI 模式下 stdout 已关闭，console.log 会抛 EPIPE，需全局吞掉
+try {
+  process.stdout.on('error', () => {})
+  process.stderr.on('error', () => {})
+} catch {}
+process.on('uncaughtException', (err) => {
+  try {
+    const p = path.join(app.getPath('userData'), 'localapi-data', 'desktop.log')
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.appendFileSync(p, `[uncaught] ${String(err.stack ?? err)}\n`)
+  } catch {}
+})
+process.on('unhandledRejection', (reason) => {
+  try {
+    const p = path.join(app.getPath('userData'), 'localapi-data', 'desktop.log')
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.appendFileSync(p, `[unhandledRejection] ${String(reason)}\n`)
+  } catch {}
+})
+
 // resolve resources when packaged vs dev
 function resolveResource(...segs: string[]): string {
   if (isPackaged) {
@@ -29,7 +49,9 @@ function log(msg: string): void {
     fs.mkdirSync(DATA_DIR, { recursive: true })
     fs.appendFileSync(LOG_PATH, line)
   } catch {}
-  console.log(msg)
+  try {
+    if (process.stdout.writable) console.log(msg)
+  } catch {}
 }
 
 function ensureDataDir(): void {
@@ -68,12 +90,16 @@ function startServer(): void {
   }
   log(`starting server: node ${target} DATA_DIR=${env.DATA_DIR} PORT=${env.PORT}`)
   serverProc = spawn(process.execPath, [target], {
-    env: env as NodeJS.ProcessEnv,
+    // execPath 是 Electron 二进制,必须 RUN_AS_NODE 才会当纯 Node 跑(且 Electron>=35 的 Node 22.14 才有 node:sqlite)
+    env: { ...env, ELECTRON_RUN_AS_NODE: '1' } as NodeJS.ProcessEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     cwd: path.dirname(target),
   })
   serverProc.stdout?.on('data', (d: Buffer) => log(`[server] ${d.toString().trim()}`))
   serverProc.stderr?.on('data', (d: Buffer) => log(`[server:err] ${d.toString().trim()}`))
+  serverProc.stdout?.on('error', () => {})
+  serverProc.stderr?.on('error', () => {})
+  serverProc.on('error', (err) => log(`server spawn error: ${String((err as Error).message ?? err)}`))
   serverProc.on('exit', (code, sig) => {
     log(`server exited code=${code} sig=${sig}`)
     if (!isQuitting.value) {
@@ -146,8 +172,12 @@ function createWindow(): void {
 
 function createTray(): void {
   try {
-    const iconPath = resolveResource('build', 'icon.ico')
-    const altPath = path.join(path.resolve(here, '../..'), 'desktop', 'build', 'icon.ico')
+    const iconPng = resolveResource('build', 'icon.png')
+    const iconIco = resolveResource('build', 'icon.ico')
+    const altPng = path.join(path.resolve(here, '../..'), 'desktop', 'build', 'icon.png')
+    const altIco = path.join(path.resolve(here, '../..'), 'desktop', 'build', 'icon.ico')
+    const iconPath = fs.existsSync(iconPng) ? iconPng : fs.existsSync(iconIco) ? iconIco : ''
+    const altPath = fs.existsSync(altPng) ? altPng : altIco
     const p = fs.existsSync(iconPath) ? iconPath : altPath
     let image: Electron.NativeImage | undefined
     if (fs.existsSync(p)) image = nativeImage.createFromPath(p)

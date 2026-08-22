@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -245,12 +245,25 @@ ipcMain.handle('app:info', () => ({
   isPackaged,
 }))
 
+ipcMain.handle('auth:getToken', () => getEnv().ADMIN_TOKEN)
+
 ipcMain.handle('shell:openExternal', (_e, url: string) => shell.openExternal(String(url)))
 
 const isQuitting = { value: false }
 
 app.whenReady().then(() => {
   ensureDataDir()
+  // 设置 CSP 头，消除 Electron 的 Insecure CSP 警告
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; object-src 'none'; base-uri 'self'",
+        ],
+      },
+    })
+  })
   createMenu()
   startServer()
   createWindow()

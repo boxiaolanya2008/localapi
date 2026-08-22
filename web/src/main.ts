@@ -9,11 +9,26 @@ import 'animate.css'
 import '@/styles/main.scss'
 import App from './App.vue'
 import router from './router'
+import { useAuthStore } from '@/stores/auth'
 
-const app = createApp(App)
-const pinia = createPinia()
-pinia.use(piniaPluginPersistedstate)
-app.use(pinia)
-app.use(router)
-app.use(ElementPlus, { locale: zhCn })
-app.mount('#app')
+async function bootstrap(): Promise<void> {
+  const app = createApp(App)
+  const pinia = createPinia()
+  pinia.use(piniaPluginPersistedstate)
+  app.use(pinia)
+
+  // 桌面端自动注入 ADMIN_TOKEN，避免 403
+  try {
+    const token = await window.localapi?.getAdminToken?.()
+    if (token) {
+      const auth = useAuthStore(pinia)
+      auth.setToken(token)
+    }
+  } catch {}
+
+  app.use(router)
+  app.use(ElementPlus, { locale: zhCn })
+  app.mount('#app')
+}
+
+void bootstrap()

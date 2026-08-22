@@ -4,6 +4,8 @@
 
 - 修复桌面端打包后启动 `EPIPE: broken pipe, write`:GUI 无控制台时 `console.log` 抛未捕获异常,改为文件日志容错 + `stdout.writable` 判断 + 全局吞 EPIPE 与 uncaughtException (#29)
 - 修复桌面端子进程 `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`:Electron 30 内置 Node 20 无该模块,升级 Electron 至 35(内置 Node 22.16)并以 `ELECTRON_RUN_AS_NODE=1` 启动服务子进程 (#30)
+- 修复桌面端 `Insecure Content-Security-Policy` 警告:补 `Content-Security-Policy` meta 与 `session.webRequest` 头 (#32)
+- 修复桌面端 `admin/settings 403` :preload 暴露 `getAdminToken`,前端启动时自动注入避免登录 (#32)
 
 ## 0.4.0 - 2026-08-22
 

@@ -42,6 +42,7 @@ Requires Node 20+ and pnpm 11+.
 pnpm install
 cp .env.example .env   # then edit ADMIN_TOKEN, really
 ```
+
 > [!IMPORTANT]
 > Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
 
@@ -70,6 +71,14 @@ export OPENAI_API_KEY=sk-lapi-xxx   # create in web panel -> Keys
 Open `http://127.0.0.1:3000`, enter `ADMIN_TOKEN`. First time: Catalog -> Add as channel -> paste upstream API key -> Save; Keys -> New key -> pick a group -> give that `sk-lapi-xxx` to your CLI.
 
 Desktop: download `LocalAPI-0.4.0-*.exe` or `portable` from [Releases](https://github.com/boxiaolanya2008/localapi/releases/tag/v0.4.0), install, tray icon -> Show. Data and logs are under `userData/localapi-data/desktop.log`.
+
+> [!NOTE]
+> Only Windows x64 is provided. SmartScreen may warn “Unknown publisher” — the app is not code-signed yet, click “Run anyway”. If you prefer, build from source.
+> 安装包只提供 Windows x64 版本。Windows 可能会弹 SmartScreen 提示「未知发布者」——应用目前没有做代码签名，点「仍要运行」即可；介意的话可以自己从源码构建。
+
+> [!WARNING]
+> Download only from this repo's Releases page. Do not use repackaged binaries from third parties.
+> 请只从本仓库的 Releases 页面下载安装包，不要使用任何第三方转载的版本。
 
 ## Configuration
 

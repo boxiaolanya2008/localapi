@@ -72,6 +72,12 @@ export OPENAI_API_KEY=sk-lapi-xxx   # 网页 密钥管理 里建
 
 桌面版：去 [Releases](https://github.com/boxiaolanya2008/localapi/releases/tag/v0.4.0) 下 `LocalAPI-0.4.0-*.exe` 或 portable，装好托盘点显示。数据与日志在 `userData/localapi-data/desktop.log`。
 
+> [!NOTE]
+> 安装包只提供 Windows x64 版本。Windows 可能会弹 SmartScreen 提示「未知发布者」——应用目前没有做代码签名，点「仍要运行」即可；介意的话可以自己从源码构建。
+
+> [!WARNING]
+> 请只从本仓库的 Releases 页面下载安装包，不要使用任何第三方转载的版本。
+
 ## 配置
 
 `.env` 只留服务级参数，其他全在网页。

@@ -29,3 +29,9 @@ pnpm --dir desktop dist   # full NSIS + portable
 
 - First run generates `DATA_DIR/.admin_token` if `ADMIN_TOKEN` not set. Check `desktop.log` next to it.
 - Keep `127.0.0.1` only, never `0.0.0.0`.
+
+> [!NOTE]
+> 安装包只提供 Windows x64 版本。Windows 可能会弹 SmartScreen 提示「未知发布者」——应用目前没有做代码签名，点「仍要运行」即可；介意的话可以自己从源码构建。
+
+> [!WARNING]
+> 请只从本仓库的 Releases 页面下载安装包，不要使用任何第三方转载的版本。

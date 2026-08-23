@@ -1,5 +1,8 @@
 # Changelog
 
+> [!NOTE]
+> 版本号遵循 `0.x` 快速迭代，`0.4.0` 起含桌面端。升级前备份 `data/localapi.db`。
+
 ## 0.4.1 - 2026-08-22
 
 - 修复桌面端打包后启动 `EPIPE: broken pipe, write`:GUI 无控制台时 `console.log` 抛未捕获异常,改为文件日志容错 + `stdout.writable` 判断 + 全局吞 EPIPE 与 uncaughtException (#29)

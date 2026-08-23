@@ -33,3 +33,6 @@ pnpm --dir desktop pack   # --dir, no installer
 
 - No ornamental comments, no emoji
 - Minimal syntax, stdlib first
+
+> [!WARNING]
+> Desktop data lives in `userData/localapi-data`, not `<repo>/data`. Don't delete the folder blindly when debugging.

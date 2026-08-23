@@ -18,3 +18,6 @@
 - 代码里禁止 emoji，图标用 SVG（项目里走 iconify）
 - 语法极简，先跑起来再说
 - 包内改动需同步维护对应包的 README 与 AGENTS.md
+
+> [!TIP]
+> 改完先 `pnpm test`，再 `pnpm --dir web run typecheck`，两步过再 push，省得 CI 挂。

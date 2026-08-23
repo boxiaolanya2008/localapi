@@ -1,29 +1,51 @@
-# LocalAPI / 本地 API 中转站
+# LocalAPI
 
-本地跑一个 OpenAI 兼容的中转服务 + Vue 管理台，其它 CLI 工具把 base_url 指过来就能走统一密钥、统一记账。
+> Run a local OpenAI-compatible relay in one command. Point any CLI's `base_url` at `http://127.0.0.1:3000/v1` and get unified keys, unified billing, unified logs.
 
-特性：
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE) [![Version](https://img.shields.io/badge/version-0.4.0-green.svg)](CHANGELOG.md) [![Node](https://img.shields.io/badge/node-%3E%3D20-black.svg)](https://nodejs.org)
 
-- OpenAI 兼容接口：`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/models`，支持 stream 流式透传
-- **渠道、API Key、模型全部在管理界面录入**，不再依赖 .env；可选模型名映射
-- 内置 2026 热门模型价格目录：每百万 token 输入/输出/缓存命中价（DeepSeek V4、Kimi K3/K2 系已按官方页联网核实，其余标注参考价），一键导入渠道自动带出价格
-- 内置 19 家提供商官方 logo（OpenAI/Anthropic/Gemini/DeepSeek/Kimi/通义/豆包/混元/文心/Grok/GLM/硅基流动等），选提供商自动填官方接口地址，也可改地址指向任意兼容服务
-- **分组计费**：自定义倍率，0 = 免费破甲、0.5 = 半价、1 = 原价、>1 = 加价；分组可限制模型；密钥归属分组，费用按倍率计算
-- 内置系统提示词预设（中文助手/代码专家/写作润色等）；默认关闭注入 = 请求 100% 原样透传
-- Vue 3 管理台：密钥、渠道、分组、模型目录、使用记录、仪表盘图表、余额（实时/估算双源）
-- 数据存 SQLite（Node 内置 `node:sqlite`，零额外依赖）
-- 默认只监听 127.0.0.1
+English | [中文](README-ZH-CN.md)
 
-## 安装
+Local. No cloud. Your keys never leave `DATA_DIR`. One SQLite file, zero extra DB dependencies.
 
-需要 Node.js 20+ 和 pnpm。
+## Why
+
+You have 3 upstream providers, 5 CLI tools, each with its own key. Cost is a mess. Logs are scattered. LocalAPI sits in the middle: CLI -> LocalAPI (`sk-lapi-xxx`) -> upstream. You get a single billing view, per-group multipliers, prompt injection control, and a dashboard that actually helps.
+
+## Features
+
+OpenAI compat: `POST /v1/chat/completions`, `/v1/completions`, `POST /v1/embeddings`, `GET /v1/models`. Stream passes through byte-for-byte. If upstream forgets `data: [DONE]`, we append it so clients don't throw `stream ended without terminal event`.
+
+Channels, keys, models live in the web panel, not `.env`. 19 provider logos (OpenAI/Anthropic/Gemini/DeepSeek/Kimi/Qwen/Doubao/Hunyuan/GLM/Grok etc.) ship built-in; picking a provider auto-fills its base URL, or point it at any compatible endpoint. Optional `MODEL_MAP` like `gpt-4o-mini=my-internal-model` stays as an env escape hatch.
+
+Pricing is built-in for 2026. Per-million input/output/cached price for DeepSeek V4, Kimi K3/K2 checked against official pages (marked `official`), others are `ref` — edit per channel. Creating a channel from the catalog auto-applies its prices.
+
+Groups do the accounting. Multiplier 0.5 = half price, 1 = original, 2 = double, 0 = free (but now default armor group is 1 to avoid confusion). Each group can restrict models. Keys belong to a group, cost = `upstream_cost * multiplier`. `groupUsage` on the dashboard shows it clearly.
+
+Protocol adapters: each channel chooses `OpenAI Chat` / `OpenAI Responses` / `Anthropic Messages` / `Custom`. LocalAPI converts bidirectionally (system messages, text, tool calls, sampling params, usage + cached tokens). Clients always speak OpenAI Chat; non-chat upstreams are called non-streaming then re-emitted as OpenAI SSE so streaming still works.
+
+Prompts: 7 free presets + 3 premium (unlock with `LP-VIP-LOCAL-2026`). Disabled by default means 100% passthrough. When enabled, order is fixed `[Global coding rule, Group prompt, Local MD, Template system, ...your messages]` — each is a separate `system` message, never overwriting the next. Global rule forbids decorative comments for every request, it's non-negotiable.
+
+Local MD system prompt: pick any `.md` / `.markdown` / `.txt` / `.mdx` locally in Settings, preview, save. 50k chars max. It coexists with the group prompt. Say you have a group "code" and a file `personal-rules.md` — both are injected. Toggle off and you're back to passthrough (except the global rule). No upload, just local `FileReader`.
+
+Dashboard: Vue 3 + Element Plus + ECharts. StatCards, 7-day token line (big numbers as 2.70M), channel pie, model bar, group cost, channel balance (live from `dashboard/billing/credit_grants` with 60s TTL, or local estimate `credit - sum(cost)`).
+
+Desktop: Electron shell in `desktop/`. One double-click starts the relay + window, tray stays resident, data lives in `app.getPath('userData')/localapi-data`. First run generates `ADMIN_TOKEN` to `DATA_DIR/.admin_token`. No terminal needed. `NOTE`: still listens on `127.0.0.1` only.
+
+Storage: `node:sqlite` WAL mode, no extra deps. Schema auto-migrates via `ensureColumn`.
+
+## Install
+
+Requires Node 20+ and pnpm 11+.
 
 ```bash
 pnpm install
-cp .env.example .env   # 填 BASE_URL / API_KEY / MODEL / ADMIN_TOKEN
+cp .env.example .env   # then edit ADMIN_TOKEN, really
 ```
+> [!IMPORTANT]
+> Change `ADMIN_TOKEN`. Default `change-me-...` is a placeholder. Don't expose to LAN without setting it.
 
-## 启动
+## Quick Start
 
 ```bash
 pnpm start            # 一键启动(生产):后端 + 前端静态页,单端口 3000
@@ -38,33 +60,97 @@ pnpm demo             # 另开一个终端起本地 mock 上游(端口4000,零�
 
 一次只敲一条命令。日常用 `pnpm start` 就够了;`.env` 里 BASE_URL 指向 mock 时,先 `pnpm demo` 再 `pnpm start`。
 
-```bash
-pnpm build  # 改了前端代码后重新构建
-```
-
-## 用法
-
-CLI 工具指向本地：
+Point a CLI at LocalAPI:
 
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:3000/v1
-export OPENAI_API_KEY=sk-lapi-xxx   # 在管理网页「密钥管理」里创建
+export OPENAI_API_KEY=sk-lapi-xxx   # create in web panel -> Keys
 ```
 
-浏览器打开 http://127.0.0.1:3000 ，输入 `.env` 里的 ADMIN_TOKEN 进入管理台。首次使用：模型目录 → 添加为渠道 → 填你申请的 API Key → 保存；密钥管理 → 建密钥并选分组 → 把密钥给 CLI 工具用。
+Open `http://127.0.0.1:3000`, enter `ADMIN_TOKEN`. First time: Catalog -> Add as channel -> paste upstream API key -> Save; Keys -> New key -> pick a group -> give that `sk-lapi-xxx` to your CLI.
 
-## 目录结构
+Desktop: download `LocalAPI-0.4.0-*.exe` or `portable` from [Releases](https://github.com/boxiaolanya2008/localapi/releases/tag/v0.4.0), install, tray icon -> Show. Data and logs are under `userData/localapi-data/desktop.log`.
+
+## Configuration
+
+Only these live in `.env`. Everything else is in the panel.
+
+```ini
+PORT=3000
+HOST=127.0.0.1
+ADMIN_TOKEN=your-long-random-string
+MODEL_MAP=gpt-4o-mini=my-model,claude-sonnet=claude-3-5-sonnet-20241022
+DATA_DIR=           # empty = <repo>/data, desktop = userData/localapi-data
+```
+
+> [!WARNING]
+> `HOST=0.0.0.0` exposes the relay to LAN. Keep `127.0.0.1` unless you know what you're doing. `ADMIN_TOKEN` is the only auth for `/admin`.
+
+## Using the Panel
+
+Keys: create, disable, delete, see request count + token totals. Key is `sk-lapi-` + 48 hex, stored as `key_hash` only for lookup.
+
+Channels: name/provider/base_url/api_key/models/price/theme/icon/inject. `Test` pings `GET /models`. Balance badge shows `live` or `estimate`. `Credit` is your manual top-up via Shop -> Recharge (local, no payment).
+
+Groups: multiplier + model allowlist + system prompt + force obey. `Default` cannot be deleted; deleting a group reassigns its keys to `Default`. `Armor` group seeds with an authorized pentest prompt.
+
+Params: 3 presets `armor/coding/ultimate` shipped. Bind a preset to a group; missing request params are backfilled, explicit values win.
+
+Local MD: Settings -> Local MD system prompt -> Choose file -> Save. Toggle, preview, clear. Not per-group, it's global and never overwrites the group's prompt.
+
+Usage: time presets Today/7d/30d/custom, filters by key/channel/group, CSV export, cached tokens column with hit rate.
+
+## API
+
+Relay (needs `Authorization: Bearer sk-lapi-xxx`):
 
 ```
-server/   后端: Express + node:sqlite,中转与管理接口
-web/      前端: Vue 3 + Element Plus + ECharts
-  src/constants/   模型价格目录、提供商 logo、提示词预设
-tools/    mock 上游与冒烟/实机验证脚本
-data/     运行时数据(SQLite),已 gitignore
+GET  /v1/models
+POST /v1/chat/completions   # stream: true -> text/event-stream
+POST /v1/completions
+POST /v1/embeddings
 ```
+
+Admin (needs `x-admin-token: $ADMIN_TOKEN`):
+
+```
+GET/POST/PATCH/DELETE /admin/keys, /admin/groups, /admin/channels, /admin/params
+GET /admin/usage?from&to&keyId&channelId&page&size
+GET /admin/usage/summary?from&to&keyId&channelId&groupId
+GET /admin/usage/export   # CSV
+GET /admin/stats          # today/total/7d/byChannel/byModel/byGroup/topKeys/balance
+GET/PUT /admin/settings/md
+```
+
+> [!NOTE]
+> Desktop's `preload.ts` exposes `window.localapi.getAppInfo()` for version/dataDir/serverUrl.
+
+## Structure
+
+```
+server/   Express + node:sqlite  (relay/admin/billing/protocol)
+  src/    config/db/relay/protocol/billing/admin/util
+  tests/  api.test.ts + protocol.test.ts  (18 tests)
+web/      Vue 3 + Element Plus + ECharts + Iconify
+  src/constants/  catalog/providers/prompts/apiStyles
+desktop/  Electron main/preload, tray, builder (nsis/portable)
+tools/    mock-upstream + smoke/verify scripts
+data/     SQLite, gitignored
+release/  electron-builder output, gitignored
+```
+
+## Develop
+
+```bash
+pnpm test                         # server tests 18/18
+pnpm --dir web run typecheck
+pnpm --dir desktop build          # tsc desktop
+pnpm build:desktop                # server + web + desktop
+pnpm dist:desktop                 # unpacked at release/win-unpacked
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Code style: no ornamental comments, no emoji (SVG via Iconify), minimal syntax. Commit `feat: ... (#123)`.
 
 ## License
 
-GPL-3.0，见 [LICENSE](LICENSE)。
-
-English: A local OpenAI-compatible API relay with a Vue admin dashboard. CLI tools point their base_url at `http://127.0.0.1:3000/v1`; keys, usage, channels, balance are managed in the web panel. Requires Node 20+ and pnpm. Data stored in SQLite via Node's built-in `node:sqlite`.
+GPL-3.0, see [LICENSE](LICENSE).

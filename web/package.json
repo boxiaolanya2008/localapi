@@ -13,7 +13,7 @@
     "@iconify/vue": "^5.0.1",
     "@vueuse/core": "^13.1.0",
     "animate.css": "^4.1.1",
-    "axios": "^1.7.9",
+    "axios": "^1.20.0",
     "dayjs": "^1.11.13",
     "echarts": "^6.1.0",
     "element-plus": "^2.9.3",

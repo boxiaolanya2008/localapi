@@ -28,7 +28,7 @@
     "@types/node": "^26.2.0",
     "@types/nprogress": "^0.2.3",
     "@vitejs/plugin-vue": "^5.2.1",
-    "sass": "^1.83.0",
+    "sass": "^1.103.1",
     "typescript": "^5.7.2",
     "unplugin-auto-import": "^19.0.0",
     "unplugin-vue-components": "^32.1.0",
